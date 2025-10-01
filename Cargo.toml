@@ -1,0 +1,37 @@
+# TODO: size, compile time, and speed benchmarks to test things like inlining, no inlining, macros instead of fns, etc.
+
+[package]
+name = "snail"
+version = "0.5.0"
+# TODO: lower msrv more maybe? core_c_str is at 1.64.0, so i'd need a custom CStr which can be converted to
+#  `std::ffi::CStr` if `std` is on or `core::ffi::CStr` if on 1.64+
+edition = "2018"
+rust-version = "1.64.0"
+description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/echohumm/snail"
+keywords = ["args", "argv", "cli", "zero-allocation", "no_std"]
+categories = ["command-line-interface"]
+readme = "README.md"
+build = "build.rs"
+
+[features]
+std = []
+
+#TODO: fewer deps
+libc = "=0.2.106"
+rustversion = "1.0.22"
+
+[build-dependencies]
+rustc_version = "0.4.1"
+
+# bench msrv is higher, so it's commented out until use
+
+[[bench]]
+name = "stdcmp"
+path = "extra/bench.rs"
+harness = false
+required-features = ["std"]
+
+[dev-dependencies]
+criterion = "0.7.0"
