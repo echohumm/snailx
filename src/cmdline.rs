@@ -83,10 +83,12 @@ pub fn arg_ptrs() -> &'static [*const u8] {
 }
 
 /// Returns a slice of <code>&'static [CStr]</code>s.
+/// 
+/// This is unsafe until I write my own `CStr` implementation, or rust's is fixed.
 #[must_use]
 #[inline]
 #[cold]
-pub fn args_slice() -> &'static [&'static CStr] {
+pub unsafe fn args_slice() -> &'static [&'static CStr] {
     let (argc, argv) = direct::argc_argv();
     assume!(argv as usize != 0 || argc == 0);
 
