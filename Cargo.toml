@@ -19,6 +19,7 @@ build = "build.rs"
 std = []
 
 #TODO: fewer deps
+[dependencies]
 libc = "=0.2.106"
 rustversion = "1.0.22"
 
