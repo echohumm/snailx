@@ -12,16 +12,6 @@
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless)]
 #![deny(missing_docs)]
 
-#[cfg(feature = "parsing")]
-macro_rules! dbg {
-    ($msg:literal $(,$($input:expr),*)?) => {
-        #[cfg(all(debug_assertions, feature = "debug_print", feature = "std"))]
-        {
-            println!(concat!("DBG: ", $msg) $(, $($input),*)?);
-        }
-    };
-}
-
 macro_rules! assume {
     (!$e:expr) => {
         if $e {
