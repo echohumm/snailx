@@ -1,7 +1,8 @@
 # TODO: size, compile time, and speed benchmarks to test things like inlining, no inlining, macros instead of fns, etc.
 
 [package]
-name = "snail"
+# i hate those old packages on crates.io that do nothing but take names, man
+name = "snailx"
 version = "0.5.0"
 # TODO: lower msrv more? will need custom cstr but will also make it safer because rust's default implementation is
 #  garbage
