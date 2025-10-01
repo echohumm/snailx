@@ -156,10 +156,9 @@ pub mod direct;
 mod cmdline;
 mod iter;
 
-
 pub use {
     cmdline::*,
-    iter::{args::*, mapped_args::*},
+    iter::{args::*, mapped_args::*}
 };
 
 // TODO: tests

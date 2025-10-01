@@ -5,9 +5,9 @@
 
 use {
     super::helpers::{cstr, cstr_nth, dec_get, len, sz_hnt, unchecked_add},
+    crate::MappedArgs,
     core::{ffi::CStr, iter::FusedIterator, ops::Index}
 };
-use crate::MappedArgs;
 
 // not Copy because that nets a 2-5% performance improvement for some reason
 /// An iterator over the program's arguments as <code>&'static [CStr]</code>s.
@@ -22,23 +22,20 @@ impl Args {
     /// Maps this iterator to a different type. Similar to [`map_args`](crate::map_args), but
     /// operating on an existing iterator.
     #[must_use]
-    pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret>>(&self, map: F) -> MappedArgs<Ret, F> {
-        MappedArgs {
-            cur: self.cur,
-            end: self.end,
-            map
-        }
+    pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret>>(
+        &self,
+        map: F
+    ) -> MappedArgs<Ret, F> {
+        MappedArgs { cur: self.cur, end: self.end, map }
     }
 
     /// Maps this iterator to `&'static str`. Similar to [`str_args`](crate::str_args), but
     /// operating on an existing iterator.
     #[must_use]
-    pub const fn map_str(&self) -> MappedArgs<&'static str, fn(&'static CStr) -> Option<&'static str>> {
-        MappedArgs {
-            cur: self.cur,
-            end: self.end,
-            map: crate::try_to_str
-        }
+    pub const fn map_str(
+        &self
+    ) -> MappedArgs<&'static str, fn(&'static CStr) -> Option<&'static str>> {
+        MappedArgs { cur: self.cur, end: self.end, map: crate::try_to_str }
     }
 }
 
@@ -55,9 +52,7 @@ impl Index<usize> for Args {
             index
         );
 
-        unsafe {
-            &*self.cur.cast::<&'static CStr>()
-        }
+        unsafe { &*self.cur.cast::<&'static CStr>() }
     }
 }
 
