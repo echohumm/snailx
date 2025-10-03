@@ -21,13 +21,13 @@ use {
 /// An iterator that maps each argument using a user-provided function. If the mapping returns 
 /// `None`, that argument is skipped.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MappedArgs<Ret, F: Fn(&'static CStr) -> Option<Ret> = fn(&'static CStr) -> Option<Ret>> {
+pub struct MappedArgs<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static = fn(&'static CStr) -> Option<Ret>> {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
     pub(crate) map: F
 }
 
-impl<F: Fn(&'static CStr) -> Option<&'static str>> Index<usize> for MappedArgs<&'static str, F> {
+impl<F: Fn(&'static CStr) -> Option<&'static str> + Copy + 'static> Index<usize> for MappedArgs<&'static str, F> {
     type Output = str;
 
     fn index(&self, index: usize) -> &'static str {
@@ -46,7 +46,7 @@ impl<F: Fn(&'static CStr) -> Option<&'static str>> Index<usize> for MappedArgs<&
 }
 
 #[cfg(feature = "std")]
-impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr>> Index<usize>
+impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr> + Copy + 'static> Index<usize>
     for MappedArgs<&'static std::ffi::OsStr, F>
 {
     type Output = std::ffi::OsStr;
@@ -67,22 +67,27 @@ impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr>> Index<usize>
 
 // TODO: dedup with Args
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
     type Item = Ret;
 
     #[inline]
     fn next(&mut self) -> Option<Ret> {
-        if self.cur == self.end {
-            return None;
+        let mut ret = None;
+
+        while self.cur != self.end {
+            let s = cstr(self.cur);
+            self.cur = unsafe { self.cur.add(1) };
+
+            if let Some(v) = (self.map)(s) {
+                ret = Some(v);
+                break;
+            }
         }
 
-        let s = cstr(self.cur);
-        self.cur = unsafe { self.cur.add(1) };
-        match (self.map)(s) {
-            Some(v) => Some(v),
-            None => self.next()
-        }
+        ret
     }
+
+    // TODO: make these skip as well, like next()
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
@@ -127,7 +132,7 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     common_iter_methods! { Ret }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedIterator for MappedArgs<Ret, F> {
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
         if self.cur == self.end {
@@ -153,9 +158,10 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> DoubleEndedIterator for MappedArg
     }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> ExactSizeIterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> ExactSizeIterator for MappedArgs<Ret, F> {
+    #[inline(always)]
     fn len(&self) -> usize {
         len(self.cur, self.end)
     }
 }
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> FusedIterator for MappedArgs<Ret, F> {}
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F> {}

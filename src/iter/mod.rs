@@ -14,6 +14,7 @@ pub(super) mod helpers {
         }
     }
 
+    #[inline(always)]
     pub fn cstr_r(p: *const u8) -> &'static CStr {
         unsafe {
             assume!(!p.is_null());

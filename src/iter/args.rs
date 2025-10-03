@@ -21,7 +21,7 @@ impl Args {
     /// Map this iterator to a different type. Like [`crate::map_args`], but operates on an existing
     /// iterator.
     #[must_use]
-    pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret>>(
+    pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static>(
         &self,
         map: F
     ) -> MappedArgs<Ret, F> {
@@ -137,6 +137,7 @@ impl DoubleEndedIterator for Args {
 }
 
 impl ExactSizeIterator for Args {
+    #[inline(always)]
     fn len(&self) -> usize {
         len(self.cur, self.end)
     }

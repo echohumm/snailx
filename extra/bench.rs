@@ -170,5 +170,5 @@ fn main() {
 
     stdcmp(&mut criterion);
 
-    Criterion::default().configure_from_args().final_summary();
+    criterion.final_summary();
 }

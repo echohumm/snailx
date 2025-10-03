@@ -23,7 +23,7 @@ pub fn args() -> Args {
 #[must_use]
 #[inline]
 #[cfg_attr(not(feature = "bench"), cold)]
-pub fn map_args<Ret, F: Fn(&'static CStr) -> Option<Ret>>(map: F) -> MappedArgs<Ret, F> {
+pub fn map_args<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static>(map: F) -> MappedArgs<Ret, F> {
     let (argc, argv) = direct::argc_argv();
     MappedArgs { cur: argv, end: back(argv, argc), map }
 }
