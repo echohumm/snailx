@@ -1,29 +1,83 @@
-use {
-    rustc_version::version,
-    std::{
-        env::current_dir,
-        fs::{read_to_string, write}
-    }
+use std::{
+    env::{self, current_dir},
+    ffi::OsString,
+    fs::{read_to_string, write},
+    process::Command
 };
+use std::process::exit;
+
+#[cfg(not(any(unix, target_vendor = "apple")))]
+compile_error!("snailx only supports Unix and macOS");
+
+struct Version {
+    major: usize,
+    minor: usize,
+}
+
+fn rust_version() -> Version {
+    let rustc = env::var_os("RUSTC").unwrap_or_else(|| OsString::from("rustc"));
+    let mut cmd = if let Some(wrapper) = env::var_os("RUSTC_WRAPPER").filter(|w| !w.is_empty()) {
+        let mut cmd = Command::new(wrapper);
+        cmd.arg(rustc);
+        cmd
+    } else {
+        Command::new(rustc)
+    };
+
+    let out = cmd.arg("-V").output().expect("failed to execute rustc to get version");
+
+    if !out.status.success() {
+        eprintln!("rustc execution failed: {}", String::from_utf8_lossy(&out.stderr));
+        exit(1);
+    }
+
+    let stdout = String::from_utf8(out.stdout).expect("rustc output was not valid UTF-8");
+
+    // split into "rustc", version, and hash
+    let mut parts = stdout.trim()
+        .split(' ')
+        // get ver
+        .nth(1)
+        .expect("rustc output did not contain version info")
+        // cut off stability tag
+        .split('-')
+        .next()
+        .expect("rustc version info did not contain a version")
+        // split into major, minor, patch
+        .splitn(3, '.');
+
+    let major = parts
+        .next()
+        .expect("rustc version did not contain a major version")
+        .parse()
+        .expect("rustc version major version was not a number");
+    let minor = parts
+        .next()
+        .expect("rustc version did not contain a minor version")
+        .parse()
+        .expect("rustc version minor version was not a number");
+
+    Version { major, minor }
+}
 
 // as jank as this may seem, because rust is stupid, we need this to make it compile on older
 // versions of rustc. cfg_attr/rustversion do not work because the attribute potentially being
 // configured out is evaluated before the configuring out, so it will still error for unrecognized
 // attrs (like unsafe).
 fn main() {
-    let v = version().expect("failed to get rustc version for build");
+    let v = rust_version();
     let cwd = current_dir().expect("failed to get current directory");
     let raw_src = cwd.join("src");
-    let src_path = cwd.join("src/direct.rs.src");
-    let dst_path = cwd.join("src/direct.rs");
+    let direct_src = raw_src.join("direct.rs.src");
 
     // Let Cargo know when to rerun the build script for the Rust source generation
-    println!("cargo:rerun-if-changed={}", raw_src.display());
+    println!("cargo:rerun-if-changed={}", direct_src.display());
     println!("cargo:rerun-if-env-changed=RUSTC");
 
-    let src_contents = read_to_string(&src_path).expect("failed to read source file");
+    let src_contents =
+        read_to_string(direct_src).expect("failed to read source file");
 
-    let generated = if v.minor > 81 {
+    let generated = if v.minor > 81 || v.major > 1 {
         src_contents
     } else {
         src_contents.as_str().replace(
@@ -32,13 +86,10 @@ fn main() {
         )
     };
 
-    // Only write if the destination differs to avoid unnecessary rebuilds and editor churn
-    let need_write = match read_to_string(&dst_path) {
-        Ok(existing) => existing != generated,
-        Err(_) => true
-    };
+    let dst_path = raw_src.join("direct.rs");
 
-    if need_write {
+    // only write if the destination differs to avoid unnecessary i/o
+    if read_to_string(&dst_path).map_or(true, |existing| existing != generated) {
         write(&dst_path, generated.as_bytes()).expect("failed to write destination file");
     }
 }

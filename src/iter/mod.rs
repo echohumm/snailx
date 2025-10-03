@@ -4,6 +4,7 @@ pub mod mapped_args;
 #[allow(clippy::inline_always)]
 pub(super) mod helpers {
     use core::{ffi::CStr, mem::size_of, slice};
+    use crate::ffi::strlen;
 
     #[inline(always)]
     pub fn cstr(p: *const *const u8) -> &'static CStr {
@@ -16,7 +17,7 @@ pub(super) mod helpers {
     pub fn cstr_r(p: *const u8) -> &'static CStr {
         unsafe {
             assume!(!p.is_null());
-            let bytes = slice::from_raw_parts(p, libc::strlen(p.cast()) + 1);
+            let bytes = slice::from_raw_parts(p, strlen(p.cast()) + 1);
             assume!(
                 !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                 "CStr does not end with null byte"

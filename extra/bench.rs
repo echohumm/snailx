@@ -1,16 +1,26 @@
 use {
-    core::{hint::black_box, time::Duration},
+    core::time::Duration,
     criterion::{BatchSize, Criterion}
 };
 
+#[rustversion::before(1.66)]
+fn black_box<T>(dummy: T) -> T {
+    dummy
+}
+
+#[rustversion::since(1.66)]
+fn black_box<T>(dummy: T) -> T {
+    core::hint::black_box(dummy)
+}
+
 // TODO: split into multiple files
 
-fn snail_and_stdlib_iteration(c: &mut Criterion) {
+fn snailx_and_stdlib_iteration(c: &mut Criterion) {
     let mut group = c.benchmark_group("args_iteration");
 
-    group.bench_function("snail_cstr", |b| {
+    group.bench_function("snailx_cstr", |b| {
         b.iter_batched_ref(
-            snail::args,
+            snailx::args,
             |args| {
                 // measured: iterate and convert each arg
                 for arg in black_box(args) {
@@ -21,9 +31,9 @@ fn snail_and_stdlib_iteration(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("snail_osstr", |b| {
+    group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
-            snail::osstr_args,
+            snailx::osstr_args,
             |args| {
                 for arg in black_box(args) {
                     black_box(arg);
@@ -33,9 +43,9 @@ fn snail_and_stdlib_iteration(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("snail_str", |b| {
+    group.bench_function("snailx_str", |b| {
         b.iter_batched_ref(
-            snail::str_args,
+            snailx::str_args,
             |args| {
                 for s in black_box(args) {
                     black_box(s);
@@ -45,9 +55,9 @@ fn snail_and_stdlib_iteration(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("snail_cstr_slice", |b| {
+    group.bench_function("snailx_cstr_slice", |b| {
         b.iter_batched_ref(
-            snail::arg_ptrs,
+            snailx::arg_ptrs,
             |args| {
                 for arg in black_box(black_box(args).iter()) {
                     black_box(arg);
@@ -84,12 +94,12 @@ fn snail_and_stdlib_iteration(c: &mut Criterion) {
     group.finish();
 }
 
-fn snail_and_stdlib_nth(c: &mut Criterion) {
+fn snailx_and_stdlib_nth(c: &mut Criterion) {
     let mut group = c.benchmark_group("args_nth");
 
-    group.bench_function("snail_cstr", |b| {
+    group.bench_function("snailx_cstr", |b| {
         b.iter_batched_ref(
-            snail::args,
+            snailx::args,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -97,9 +107,9 @@ fn snail_and_stdlib_nth(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("snail_osstr", |b| {
+    group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
-            snail::osstr_args,
+            snailx::osstr_args,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -107,9 +117,9 @@ fn snail_and_stdlib_nth(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("snail_str", |b| {
+    group.bench_function("snailx_str", |b| {
         b.iter_batched_ref(
-            snail::str_args,
+            snailx::str_args,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -129,7 +139,7 @@ fn snail_and_stdlib_nth(c: &mut Criterion) {
 
     group.bench_function("stdlib_string", |b| {
         b.iter_batched_ref(
-            snail::args,
+            snailx::args,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -140,23 +150,25 @@ fn snail_and_stdlib_nth(c: &mut Criterion) {
     group.finish();
 }
 
-pub fn stdcmp() {
+pub fn stdcmp(c: &mut Criterion) {
     // Use detailed, accuracy-focused but standard baseline settings.
     // All of these can be overridden via CLI flags (configure_from_args).
-    let mut criterion: Criterion<_> = Criterion::default()
-        .sample_size(400) // default is 100; use a bit larger for stability
-        .measurement_time(Duration::from_secs(8))
-        .warm_up_time(Duration::from_secs(4))
-        .nresamples(400_000) // default is 100_000; increase for tighter CIs
-        .noise_threshold(0.005) // treat changes below 0.5% as noise
-        .confidence_level(0.99) // tighter confidence interval
-        .configure_from_args();
-    snail_and_stdlib_iteration(&mut criterion);
-    snail_and_stdlib_nth(&mut criterion);
+    snailx_and_stdlib_iteration(c);
+    snailx_and_stdlib_nth(c);
 }
 
 fn main() {
-    stdcmp();
+
+    let mut criterion: Criterion<_> = Criterion::default()
+        .sample_size(800) // default is 100; use a bit larger for stability
+        .measurement_time(Duration::from_secs(16))
+        .warm_up_time(Duration::from_secs(4))
+        .nresamples(800_000) // default is 100_000; increase for tighter CIs
+        .noise_threshold(0.001) // treat changes below 0.1% as noise
+        .confidence_level(0.999) // tighter confidence interval
+        .configure_from_args();
+
+    stdcmp(&mut criterion);
 
     Criterion::default().configure_from_args().final_summary();
 }

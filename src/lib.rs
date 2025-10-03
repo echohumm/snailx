@@ -1,16 +1,21 @@
-//! `snail` provides a simple, zero-allocation interface for iterating over the arguments of a
+//! `snailx` provides a simple, zero-allocation interface for iterating over the arguments of a
 //! program.
+//! 
+//! This crate exposes lightweight, zero-copy iterators over program arguments:
+//! - [`args`] yields `&'static core::ffi::CStr`
+//! - [`str_args`] yields `&'static str` (non-UTF-8 arguments are skipped)
+//! - [`arg_ptrs`] returns the raw argv as `&'static [*const u8]`
+//! - [`map_args`] lets you map each `&'static CStr` into a custom type; `None` values are skipped
+//! - [`osstr_args`] (with the `std` feature) yields `&'static std::ffi::OsStr`
 //!
-//! Use [`Args`] to iterate over the program's arguments. If you wish to iterate over the arguments
-//! as <code>&'static [CStr](core::ffi::CStr)</code>s, use either the [`IntoIterator`]
-//! implementation or the [`Args::iter`] method.
-//!
-//! If you wish to iterate over the arguments as `&'static str`s, use [`Args::iter_str`].
+//! `no_std` by default; enable the `std` feature for `OsStr` support.
+//! Targets Unix-like systems and macOS.
 
 // yes, this crate is *technically* no_std.
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless)]
+#![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 #![deny(missing_docs)]
+extern crate core;
 
 macro_rules! assume {
     (!$e:expr) => {
@@ -152,6 +157,7 @@ macro_rules! common_iter_methods {
 }
 
 pub mod direct;
+mod ffi;
 
 mod cmdline;
 mod iter;

@@ -3,7 +3,7 @@
 [package]
 # i hate those old packages on crates.io that do nothing but take names, man
 name = "snailx"
-version = "0.5.1"
+version = "0.5.2"
 # TODO: lower msrv more? will need custom cstr but will also make it safer because rust's default implementation is
 #  garbage
 edition = "2018"
@@ -11,22 +11,26 @@ rust-version = "1.64.0"
 description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/echohumm/snail"
+# TODO: better keywords/cats
 keywords = ["args", "argv", "cli", "zero-allocation", "no_std"]
 categories = ["command-line-interface"]
 readme = "README.md"
 build = "build.rs"
 exclude = ["/src/main.rs", "/extra/"]
 
+[package.metadata.docs.rs]
+all-features = true
+
+# TODO: badges
+
 [features]
 std = []
+# small changes specifically for benchmarking.
+# used because many functions are #[cold], but benchmarking runs them multiple times, decreasing accuracy.
+bench = []
 
-#TODO: fewer deps
 [dependencies]
-libc = "=0.2.106"
 rustversion = "1.0.22"
-
-[build-dependencies]
-rustc_version = "0.4.1"
 
 # bench msrv is higher, so it's commented out until use
 
@@ -34,7 +38,7 @@ rustc_version = "0.4.1"
 name = "stdcmp"
 path = "extra/bench.rs"
 harness = false
-required-features = ["std"]
+required-features = ["std", "bench"]
 
 [dev-dependencies]
 criterion = "0.7.0"

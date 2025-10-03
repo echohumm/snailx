@@ -1,23 +1,27 @@
 #![allow(clippy::inline_always)]
-//! The `direct` module provides direct access to argc and argv.
+//! Direct, platform-specific access to `argc` and `argv`.
+//! Most users should prefer the higher-level iterators in the crate root.
 
 /// Returns `(argc, argv)`, where `argc` is the number of arguments and `argv` is a pointer to an
-/// array of pointers to null-terminated strings, the program arguments.
+/// array of pointers to null-terminated strings (the program arguments).
 #[must_use]
 #[inline(always)]
-#[cold]
+#[cfg_attr(not(feature = "bench"), cold)]
 pub fn argc_argv() -> (u32, *const *const u8) {
     imp::argc_argv()
 }
 
 /// Sets the value of `argc` and `argv`.
 ///
+/// Note that this does not actually modify the values of `argc` and `argv`, only the atomic used by
+/// `snailx` to access them.
+///
 /// # Safety
 ///
-/// The caller must ensure it is safe to modify `argc` and `argv` and no concurrent access is
-/// occurring.
+/// The caller must ensure it is safe to modify `argc` and `argv`, and that no concurrent access is
+/// taking place.
 #[inline(always)]
-#[cold]
+#[cfg_attr(not(feature = "bench"), cold)]
 pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *const u8) {
 	imp::set_argc_argv(argc, argv)
 }
@@ -58,9 +62,9 @@ cfgr! {
     use {
             core::{
                 ptr,
-                sync::atomic::{AtomicU32, AtomicPtr, Ordering}
+                sync::atomic::{AtomicU32, AtomicPtr, Ordering},
+				ffi::{c_int, c_uint}
             },
-            libc::{c_int, c_uint},
         };
 
         static ARGC: AtomicU32 = AtomicU32::new(0);
@@ -83,7 +87,7 @@ cfgr! {
         };
 
 		#[inline(always)]
-		#[cold]
+		#[cfg_attr(not(feature = "bench"), cold)]
         pub fn argc_argv() -> (u32, *const *const u8) {
             let argv = ARGV.load(Ordering::Relaxed);
 
@@ -101,8 +105,7 @@ cfgr! {
 
 #[cfg(target_vendor = "apple")]
 pub(crate) mod imp {
-    use libc::{c_char, c_int};
-	use crate::error::Error;
+    use core::ffi::{c_char, c_int};
 
     unsafe extern "C" {
         fn _NSGetArgc() -> *mut c_int;
@@ -110,7 +113,7 @@ pub(crate) mod imp {
     }
 
 	#[inline(always)]
-	#[cold]
+	#[cfg_attr(not(feature = "bench"), cold)]
     pub fn argc_argv() -> (u32, *const *const u8) {
         unsafe { (_NSGetArgc().read() as u32, _NSGetArgv().read().cast()) }
     }
@@ -129,7 +132,7 @@ pub(crate) mod imp {
 #[cfg(windows)]
 pub(crate) mod imp {
 	#[inline(always)]
-	#[cold]
+	#[cfg_attr(not(feature = "bench"), cold)]
 	pub fn argc_argv() -> (u32, *const *const u8) {
 		compile_error!("windows is not yet supported. when or if it is, it will not be \
 		zero-allocation like as is the purpose of this crate.");

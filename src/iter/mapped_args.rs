@@ -5,23 +5,21 @@ use {
     core::{ffi::CStr, iter::FusedIterator, ops::Index}
 };
 
-/// This enum is used to determine what to do when an argument fails to parse.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
-pub enum Recovery {
-    /// Return the contained string.
-    Yield(&'static str),
-    /// Skip the argument, returning the next valid argument or `None` if there are no more.
-    Skip,
-    /// Just return `None`.
-    YieldNone
-}
+// /// This enum is used to determine what to do when an argument fails to parse.
+// #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// #[repr(u8)]
+// pub enum Recovery {
+//     /// Return the contained string.
+//     Yield(&'static str),
+//     /// Skip the argument, returning the next valid argument or `None` if there are no more.
+//     Skip,
+//     /// Just return `None`.
+//     YieldNone
+// }
 
 // not Copy for consistency with Args
-/// An iterator over the program's arguments as a mapped type.
-///
-/// If the mapping function ever returns `None`, the iterator will skip the argument and continue,
-/// returning the next valid argument or `None` if there are no more.
+/// An iterator that maps each argument using a user-provided function. If the mapping returns 
+/// `None`, that argument is skipped.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MappedArgs<Ret, F: Fn(&'static CStr) -> Option<Ret> = fn(&'static CStr) -> Option<Ret>> {
     pub(crate) cur: *const *const u8,
@@ -66,6 +64,8 @@ impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr>> Index<usize>
         unsafe { (self.map)(cstr(idx)).unwrap_unchecked() }
     }
 }
+
+// TODO: dedup with Args
 
 impl<Ret, F: Fn(&'static CStr) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     type Item = Ret;

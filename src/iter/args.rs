@@ -10,7 +10,7 @@ use {
 };
 
 // not Copy because that nets a 2-5% performance improvement for some reason
-/// An iterator over the program's arguments as <code>&'static [CStr]</code>s.
+/// An iterator over program arguments as `&'static core::ffi::CStr`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Args {
     pub(crate) cur: *const *const u8,
@@ -18,9 +18,8 @@ pub struct Args {
 }
 
 impl Args {
-    // TODO: dedup with cmdline::map_args, etc.
-    /// Maps this iterator to a different type. Similar to [`map_args`](crate::map_args), but
-    /// operating on an existing iterator.
+    /// Map this iterator to a different type. Like [`crate::map_args`], but operates on an existing
+    /// iterator.
     #[must_use]
     pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret>>(
         &self,
@@ -29,8 +28,8 @@ impl Args {
         MappedArgs { cur: self.cur, end: self.end, map }
     }
 
-    /// Maps this iterator to `&'static str`. Similar to [`str_args`](crate::str_args), but
-    /// operating on an existing iterator.
+    /// Map this iterator to `&'static str`. Like [`crate::str_args`], but operates on an existing
+    /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     pub const fn map_str(
         &self
@@ -52,7 +51,7 @@ impl Index<usize> for Args {
             index
         );
 
-        unsafe { &*self.cur.cast::<&'static CStr>() }
+        unsafe { &*idx.cast::<&'static CStr>() }
     }
 }
 
