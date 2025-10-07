@@ -18,6 +18,7 @@
 extern crate core;
 
 macro_rules! assume {
+    // completely unreachable branches
     (!$e:expr) => {
         if $e {
             #[allow(unused_unsafe)]
@@ -26,7 +27,6 @@ macro_rules! assume {
             }
         }
     };
-    // completely unreachable branch
     ($e:expr) => {
         if !$e {
             #[allow(unused_unsafe)]

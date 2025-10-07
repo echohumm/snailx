@@ -18,16 +18,21 @@ use {
 // }
 
 // not Copy for consistency with Args
-/// An iterator that maps each argument using a user-provided function. If the mapping returns 
+/// An iterator that maps each argument using a user-provided function. If the mapping returns
 /// `None`, that argument is skipped.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MappedArgs<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static = fn(&'static CStr) -> Option<Ret>> {
+pub struct MappedArgs<
+    Ret,
+    F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static = fn(&'static CStr) -> Option<Ret>
+> {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
     pub(crate) map: F
 }
 
-impl<F: Fn(&'static CStr) -> Option<&'static str> + Copy + 'static> Index<usize> for MappedArgs<&'static str, F> {
+impl<F: Fn(&'static CStr) -> Option<&'static str> + Copy + 'static> Index<usize>
+    for MappedArgs<&'static str, F>
+{
     type Output = str;
 
     fn index(&self, index: usize) -> &'static str {
@@ -87,20 +92,27 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
         ret
     }
 
-    // TODO: make these skip as well, like next()
-
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
-        let len = self.len();
-        if n >= len {
+        if n >= self.len() {
             self.cur = self.end;
             return None;
         }
 
-        let p = unsafe { self.cur.add(n) };
-        self.cur = unsafe { p.add(1) };
-        let s = cstr_nth(p);
-        (self.map)(s)
+        let mut ret = None;
+
+        while self.cur != self.end {
+            let p = unsafe { self.cur.add(n) };
+            self.cur = unsafe { p.add(1) };
+            let s = cstr_nth(p);
+
+            if let Some(v) = (self.map)(s) {
+                ret = Some(v);
+                break;
+            }
+        }
+
+        ret
     }
 
     #[inline]
@@ -132,7 +144,9 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
     common_iter_methods! { Ret }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedIterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
+    for MappedArgs<Ret, F>
+{
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
         if self.cur == self.end {
@@ -158,10 +172,15 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedItera
     }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> ExactSizeIterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> ExactSizeIterator
+    for MappedArgs<Ret, F>
+{
     #[inline(always)]
     fn len(&self) -> usize {
         len(self.cur, self.end)
     }
 }
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F> {}
+impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> FusedIterator
+    for MappedArgs<Ret, F>
+{
+}

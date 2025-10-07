@@ -68,8 +68,6 @@ impl Iterator for Args {
         }
         assume!(self.cur < self.end);
 
-        // TODO: make this less weird, and more consistent between this, next_back, nth, and the
-        //  same in StrArgsIter
         let p = self.cur;
         self.cur = unsafe { self.cur.add(1) };
         Some(cstr(p))
@@ -77,8 +75,7 @@ impl Iterator for Args {
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<&'static CStr> {
-        let len = self.len();
-        if n >= len {
+        if n >= self.len() {
             self.cur = self.end;
             return None;
         }
@@ -102,6 +99,7 @@ impl Iterator for Args {
             unsafe {
                 unchecked_add(&mut i, 1);
             }
+            
             if i == len {
                 break;
             }

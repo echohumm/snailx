@@ -10,15 +10,7 @@ pub(super) mod helpers {
     pub fn cstr(p: *const *const u8) -> &'static CStr {
         unsafe {
             assume!(!p.is_null());
-            cstr_r(p.read())
-        }
-    }
-
-    #[inline(always)]
-    pub fn cstr_r(p: *const u8) -> &'static CStr {
-        unsafe {
-            assume!(!p.is_null());
-            let bytes = slice::from_raw_parts(p, strlen(p.cast()) + 1);
+            let bytes = slice::from_raw_parts(p.read(), strlen(p.cast()) + 1);
             assume!(
                 !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                 "CStr does not end with null byte"
@@ -27,6 +19,20 @@ pub(super) mod helpers {
             &*(bytes as *const [u8] as *const CStr)
         }
     }
+
+    // #[inline(always)]
+    // pub fn cstr_r(p: *const u8) -> &'static CStr {
+    //     unsafe {
+    //         assume!(!p.is_null());
+    //         let bytes = slice::from_raw_parts(p, strlen(p.cast()) + 1);
+    //         assume!(
+    //             !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
+    //             "CStr does not end with null byte"
+    //         );
+    //
+    //         &*(bytes as *const [u8] as *const CStr)
+    //     }
+    // }
 
     // used because for some reason this is faster for nth, but slower for iteration?
     #[inline(always)]
