@@ -1,10 +1,9 @@
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
 use {
-    super::helpers::{cstr, cstr_nth, dec_get, len, sz_hnt, unchecked_add},
-    core::{ffi::CStr, iter::FusedIterator, ops::Index}
+    super::helpers::{len, sz_hnt, unchecked_add},
+    core::{iter::FusedIterator, ops::Index},
 };
-
 // /// This enum is used to determine what to do when an argument fails to parse.
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 // #[repr(u8)]
@@ -23,14 +22,16 @@ use {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MappedArgs<
     Ret,
-    F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static = fn(&'static CStr) -> Option<Ret>
+    F: Fn(*const u8) -> Option<Ret> + Copy + 'static = fn(*const u8) -> Option<Ret>,
 > {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
-    pub(crate) map: F
+    pub(crate) map: F,
+    // MAYBEDO: below bc sometimes nth has a faster method
+    // pub(crate) nth_map: F
 }
 
-impl<F: Fn(&'static CStr) -> Option<&'static str> + Copy + 'static> Index<usize>
+impl<F: Fn(*const u8) -> Option<&'static str> + Copy + 'static> Index<usize>
     for MappedArgs<&'static str, F>
 {
     type Output = str;
@@ -46,12 +47,12 @@ impl<F: Fn(&'static CStr) -> Option<&'static str> + Copy + 'static> Index<usize>
             index
         );
 
-        (self.map)(cstr(idx)).expect("cstr contains invalid UTF-8")
+        (self.map)(unsafe { idx.read() }).expect("cstr contains invalid UTF-8")
     }
 }
 
 #[cfg(feature = "std")]
-impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr> + Copy + 'static> Index<usize>
+impl<F: Fn(*const u8) -> Option<&'static std::ffi::OsStr> + Copy + 'static> Index<usize>
     for MappedArgs<&'static std::ffi::OsStr, F>
 {
     type Output = std::ffi::OsStr;
@@ -66,13 +67,13 @@ impl<F: Fn(&'static CStr) -> Option<&'static std::ffi::OsStr> + Copy + 'static> 
             index
         );
 
-        unsafe { (self.map)(cstr(idx)).unwrap_unchecked() }
+        unsafe { (self.map)(idx.read()).unwrap_unchecked() }
     }
 }
 
 // TODO: dedup with Args
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
     type Item = Ret;
 
     #[inline]
@@ -80,10 +81,10 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
         let mut ret = None;
 
         while self.cur != self.end {
-            let s = cstr(self.cur);
+            let p = self.cur;
             self.cur = unsafe { self.cur.add(1) };
 
-            if let Some(v) = (self.map)(s) {
+            if let Some(v) = (self.map)(unsafe { p.read() }) {
                 ret = Some(v);
                 break;
             }
@@ -101,12 +102,12 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
 
         let mut ret = None;
 
+        // TODO: try rewriting this to be faster
         while self.cur != self.end {
             let p = unsafe { self.cur.add(n) };
             self.cur = unsafe { p.add(1) };
-            let s = cstr_nth(p);
 
-            if let Some(v) = (self.map)(s) {
+            if let Some(v) = (self.map)(unsafe { p.read() }) {
                 ret = Some(v);
                 break;
             }
@@ -126,8 +127,7 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
 
         let mut i = 0;
         loop {
-            let s = unsafe { cstr(self.cur.add(i)) };
-            if let Some(v) = (self.map)(s) {
+            if let Some(v) = (self.map)(unsafe { self.cur.add(i).read() }) {
                 acc = f(acc, v);
             }
 
@@ -141,22 +141,29 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> Iterator for Map
         acc
     }
 
-    common_iter_methods! { Ret }
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        sz_hnt(self.cur, self.end)
+    }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
+impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
     for MappedArgs<Ret, F>
 {
+    // TODO: skip like next and nth do
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
         if self.cur == self.end {
             return None;
         }
 
-        let s = dec_get(&mut self.end);
-        (self.map)(s)
+        unsafe {
+            self.end = self.end.sub(1);
+            (self.map)(self.end.read())
+        }
     }
 
+    #[inline]
     fn nth_back(&mut self, n: usize) -> Option<Ret> {
         let len = self.len();
         if n >= len {
@@ -165,14 +172,14 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> DoubleEndedItera
         }
 
         // Move end backward by n+1 (exclusive-end semantics) and read the element
-        let p = unsafe { self.end.sub(n + 1) };
-        self.end = p;
-        let s = cstr_nth(p);
-        (self.map)(s)
+        unsafe {
+            self.end = self.end.sub(n + 1);
+            (self.map)(self.end.read())
+        }
     }
 }
 
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> ExactSizeIterator
+impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> ExactSizeIterator
     for MappedArgs<Ret, F>
 {
     #[inline(always)]
@@ -180,7 +187,4 @@ impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> ExactSizeIterato
         len(self.cur, self.end)
     }
 }
-impl<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static> FusedIterator
-    for MappedArgs<Ret, F>
-{
-}
+impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F> {}

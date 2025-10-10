@@ -2,16 +2,15 @@ use std::{
     env::{self, current_dir},
     ffi::OsString,
     fs::{read_to_string, write},
-    process::Command
+    process::{Command, exit}
 };
-use std::process::exit;
 
 #[cfg(not(any(unix, target_vendor = "apple")))]
 compile_error!("snailx only supports Unix and macOS");
 
 struct Version {
     major: usize,
-    minor: usize,
+    minor: usize
 }
 
 fn rust_version() -> Version {
@@ -34,7 +33,8 @@ fn rust_version() -> Version {
     let stdout = String::from_utf8(out.stdout).expect("rustc output was not valid UTF-8");
 
     // split into "rustc", version, and hash
-    let mut parts = stdout.trim()
+    let mut parts = stdout
+        .trim()
         .split(' ')
         // get ver
         .nth(1)
@@ -74,8 +74,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", direct_src.display());
     println!("cargo:rerun-if-env-changed=RUSTC");
 
-    let src_contents =
-        read_to_string(direct_src).expect("failed to read source file");
+    let src_contents = read_to_string(direct_src).expect("failed to read source file");
 
     let generated = if v.minor > 81 || v.major > 1 {
         src_contents

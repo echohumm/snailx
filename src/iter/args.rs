@@ -4,7 +4,7 @@
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
 use {
-    super::helpers::{cstr, cstr_nth, dec_get, len, sz_hnt, unchecked_add},
+    super::helpers::{cstr, len, sz_hnt},
     crate::MappedArgs,
     core::{ffi::CStr, iter::FusedIterator, ops::Index}
 };
@@ -21,7 +21,7 @@ impl Args {
     /// Map this iterator to a different type. Like [`crate::map_args`], but operates on an existing
     /// iterator.
     #[must_use]
-    pub const fn map_ty<Ret, F: Fn(&'static CStr) -> Option<Ret> + Copy + 'static>(
+    pub const fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
         &self,
         map: F
     ) -> MappedArgs<Ret, F> {
@@ -33,7 +33,7 @@ impl Args {
     #[must_use]
     pub const fn map_str(
         &self
-    ) -> MappedArgs<&'static str, fn(&'static CStr) -> Option<&'static str>> {
+    ) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
         MappedArgs { cur: self.cur, end: self.end, map: crate::try_to_str }
     }
 }
@@ -82,32 +82,16 @@ impl Iterator for Args {
 
         let p = unsafe { self.cur.add(n) };
         self.cur = unsafe { p.add(1) };
-        Some(cstr_nth(p))
+
+        assume!(!p.is_null());
+
+        Some(unsafe { CStr::from_ptr(p.read().cast()) })
     }
 
-    #[inline]
-    fn fold<B, F: FnMut(B, &'static CStr) -> B>(self, init: B, mut f: F) -> B {
-        let len = self.len();
-        if len == 0 {
-            return init;
-        }
-
-        let mut acc = init;
-        let mut i = 0;
-        loop {
-            acc = f(acc, unsafe { cstr(self.cur.add(i)) });
-            unsafe {
-                unchecked_add(&mut i, 1);
-            }
-            
-            if i == len {
-                break;
-            }
-        }
-        acc
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        sz_hnt(self.cur, self.end)
     }
-
-    common_iter_methods!(&'static CStr);
 }
 
 impl DoubleEndedIterator for Args {
@@ -117,25 +101,12 @@ impl DoubleEndedIterator for Args {
             return None;
         }
 
-        Some(dec_get(&mut self.end))
-    }
-
-    #[inline]
-    fn nth_back(&mut self, n: usize) -> Option<&'static CStr> {
-        let len = self.len();
-        if n >= len {
-            self.cur = self.end;
-            return None;
-        }
-
-        let p = unsafe { self.end.sub(n + 1) };
-        self.end = p;
-        Some(cstr_nth(p))
+        self.end = unsafe { self.end.sub(1) };
+        Some(cstr(self.end))
     }
 }
 
 impl ExactSizeIterator for Args {
-    #[inline(always)]
     fn len(&self) -> usize {
         len(self.cur, self.end)
     }

@@ -72,7 +72,7 @@ cfgr! {
 		
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         #[used]
-		#[unsafe(link_section = ".init_array.00099")]
+		#[unsafe(link_section = ".init_array.00098")]
         static INIT: extern "C" fn(c_int, *const *const u8, *const *const u8) = {
             extern "C" fn init_wrapper(
                 argc: c_int,

@@ -28,6 +28,8 @@ std = []
 # small changes specifically for benchmarking.
 # used because many functions are #[cold], but benchmarking runs them multiple times, decreasing accuracy.
 bench = []
+# removes utf-8 validity checks when mapping CStrs to strs.
+assume_valid_str = []
 
 [dependencies]
 rustversion = "1.0.22"
