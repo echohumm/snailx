@@ -1,19 +1,18 @@
 # TODO: size, compile time, and speed benchmarks to test things like inlining, no inlining, macros instead of fns, etc.
 
 [package]
-# i hate those old packages on crates.io that do nothing but take names, man
 name = "snailx"
 version = "0.6.1"
-# TODO: lower msrv more? will need custom cstr but will also make it safer because rust's default implementation is
-#  garbage
+authors = ["echohumm <echo0humm@gmail.com>"]
+# TODO: lower msrv more? will need custom cstr
 edition = "2018"
-rust-version = "1.64.0"
+rust-version = "1.56.0"
 description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
-license = "Apache-2.0 OR MIT"
+license = "GPL-3 OR MIT"
 repository = "https://github.com/echohumm/snail"
 # TODO: better keywords/cats
 keywords = ["args", "argv", "cli", "zero-allocation", "no_std"]
-categories = ["command-line-interface"]
+categories = ["command-line-interface", "no-std::no-alloc"]
 readme = "README.md"
 build = "build.rs"
 exclude = ["/src/main.rs", "/extra/"]
@@ -21,26 +20,38 @@ exclude = ["/src/main.rs", "/extra/"]
 [package.metadata.docs.rs]
 all-features = true
 
-# TODO: badges
-
 [features]
+# benchmarking with std
+# with str checks
+full_pure_bench = ["bench", "std"]
+# without str checks
+full_opt_bench = ["opt_bench", "std"]
+
+# benchmarking without std
+# ...none with because it's redundant to bench
+# without str checks
+opt_bench = ["bench", "assume_valid_str"]
+
+bench = ["no_cold"]
+
 std = []
-# small changes specifically for benchmarking.
-# used because many functions are #[cold], but benchmarking runs them multiple times, decreasing accuracy.
-bench = []
-# removes utf-8 validity checks when mapping CStrs to strs.
+# removes #[cold] attrs on functions
+no_cold = []
+# removes utf-8 validity checks when converting &[u8]s to &strs.
+# should usually not be used if using str_args, unless you trust your users not to enter dumb stuff
 assume_valid_str = []
+# switches snailx::CStr::to_stdlib from returning std::ffi::CStr to returning core::ffi::CStr.
+# requires rust ver >= 1.64
+to_core_cstr = []
 
-[dependencies]
-rustversion = "1.0.22"
+# commented out until usage because it's a higher msrv than the crate
 
-# bench msrv is higher, so it's commented out until use
-
-[[bench]]
-name = "stdcmp"
-path = "extra/bench.rs"
-harness = false
-required-features = ["std", "bench"]
-
-[dev-dependencies]
-criterion = "0.7.0"
+#[[bench]]
+#name = "stdcmp"
+#path = "extra/bench.rs"
+#harness = false
+## let's not accidentally bench without this lol
+#required-features = ["bench"]
+#
+#[dev-dependencies]
+#criterion = "0.7.0"

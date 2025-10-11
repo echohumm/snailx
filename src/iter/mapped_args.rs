@@ -1,9 +1,10 @@
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
 use {
-    super::helpers::{len, sz_hnt, unchecked_add},
-    core::{iter::FusedIterator, ops::Index},
+    super::helpers::{len, sz_hnt},
+    core::iter::FusedIterator
 };
+
 // /// This enum is used to determine what to do when an argument fails to parse.
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 // #[repr(u8)]
@@ -22,59 +23,18 @@ use {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MappedArgs<
     Ret,
-    F: Fn(*const u8) -> Option<Ret> + Copy + 'static = fn(*const u8) -> Option<Ret>,
+    F: Fn(*const u8) -> Option<Ret> + Copy + 'static = fn(*const u8) -> Option<Ret>
 > {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
-    pub(crate) map: F,
-    // MAYBEDO: below bc sometimes nth has a faster method
-    // pub(crate) nth_map: F
+    pub(crate) map: F /* MAYBEDO: below bc sometimes nth has a faster method
+                       * pub(crate) nth_map: F */
 }
-
-impl<F: Fn(*const u8) -> Option<&'static str> + Copy + 'static> Index<usize>
-    for MappedArgs<&'static str, F>
-{
-    type Output = str;
-
-    fn index(&self, index: usize) -> &'static str {
-        // TODO: make this a helper
-        let idx = self.cur.wrapping_add(index);
-
-        assume!(
-            idx < self.end && idx >= self.cur,
-            "index out of bounds: the len is {} but the index is {}",
-            self.len(),
-            index
-        );
-
-        (self.map)(unsafe { idx.read() }).expect("cstr contains invalid UTF-8")
-    }
-}
-
-#[cfg(feature = "std")]
-impl<F: Fn(*const u8) -> Option<&'static std::ffi::OsStr> + Copy + 'static> Index<usize>
-    for MappedArgs<&'static std::ffi::OsStr, F>
-{
-    type Output = std::ffi::OsStr;
-
-    fn index(&self, index: usize) -> &'static std::ffi::OsStr {
-        let idx = self.cur.wrapping_add(index);
-
-        assume!(
-            idx < self.end && idx >= self.cur,
-            "index out of bounds: the len is {} but the index is {}",
-            self.len(),
-            index
-        );
-
-        unsafe { (self.map)(idx.read()).unwrap_unchecked() }
-    }
-}
-
-// TODO: dedup with Args
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
     type Item = Ret;
+
+    // TODO: try rewriting these to be faster
 
     #[inline]
     fn next(&mut self) -> Option<Ret> {
@@ -93,6 +53,12 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
         ret
     }
 
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        sz_hnt(self.cur, self.end)
+    }
+
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
         if n >= self.len() {
@@ -102,7 +68,6 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 
         let mut ret = None;
 
-        // TODO: try rewriting this to be faster
         while self.cur != self.end {
             let p = unsafe { self.cur.add(n) };
             self.cur = unsafe { p.add(1) };
@@ -131,19 +96,14 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
                 acc = f(acc, v);
             }
 
-            unsafe {
-                unchecked_add(&mut i, 1);
-            }
+            assume!(i.checked_add(1).is_some(), "integer overflow");
+            i += 1;
+
             if i == len {
                 break;
             }
         }
         acc
-    }
-
-    #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        sz_hnt(self.cur, self.end)
     }
 }
 
@@ -182,6 +142,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> ExactSizeIterator
     for MappedArgs<Ret, F>
 {
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     fn len(&self) -> usize {
         len(self.cur, self.end)

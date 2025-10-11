@@ -22,6 +22,7 @@ pub fn argc_argv() -> (u32, *const *const u8) {
 /// taking place.
 #[inline(always)]
 #[cfg_attr(not(feature = "bench"), cold)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *const u8) {
 	imp::set_argc_argv(argc, argv)
 }
@@ -63,8 +64,8 @@ cfgr! {
             core::{
                 ptr,
                 sync::atomic::{AtomicU32, AtomicPtr, Ordering},
-				ffi::{c_int, c_uint}
             },
+			crate::ffi::{c_int, c_uint},
         };
 
         static ARGC: AtomicU32 = AtomicU32::new(0);
@@ -105,7 +106,7 @@ cfgr! {
 
 #[cfg(target_vendor = "apple")]
 pub(crate) mod imp {
-    use core::ffi::{c_char, c_int};
+	use crate::ffi::{c_int, c_uint};
 
     unsafe extern "C" {
         fn _NSGetArgc() -> *mut c_int;

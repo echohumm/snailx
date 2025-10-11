@@ -80,8 +80,8 @@ fn main() {
         src_contents
     } else {
         src_contents.as_str().replace(
-            "#[unsafe(link_section = \".init_array.00099\")]",
-            "#[link_section = \".init_array.00099\"]"
+            "#[unsafe(link_section = \".init_array.00098\")]",
+            "#[link_section = \".init_array.00098\"]"
         )
     };
 

@@ -1,3 +1,5 @@
+use core::mem::size_of;
+
 #[inline(always)]
 pub fn is_valid_utf8(v: &[u8]) -> bool {
     const ASCII_BS: usize = 2 * size_of::<usize>();
@@ -19,7 +21,6 @@ pub fn is_valid_utf8(v: &[u8]) -> bool {
                 while index + ASCII_BS <= len {
                     // SAFETY: `ptr.add(index)` is aligned by the check above,
                     // and we only read inside `v` due to the `<= len` guard.
-                    assume!(ptr.cast::<usize>().is_aligned());
                     unsafe {
                         let block = ptr.add(index).cast();
                         if contains_nonascii(*block) || contains_nonascii(*block.add(1)) {
@@ -59,12 +60,13 @@ pub fn is_valid_utf8(v: &[u8]) -> bool {
             }
             3 => {
                 let b1 = unsafe { *v.get_unchecked(index + 1) };
+                #[allow(clippy::unnested_or_patterns)]
                 match (first, b1) {
                     (0xE0, 0xA0..=0xBF)
                     | (0xE1..=0xEC, 0x80..=0xBF)
                     | (0xED, 0x80..=0x9F)
                     | (0xEE..=0xEF, 0x80..=0xBF) => {}
-                    _ => return false,
+                    _ => return false
                 }
                 let b2 = unsafe { *v.get_unchecked(index + 2) };
                 if !is_continuation(b2) {
@@ -74,10 +76,8 @@ pub fn is_valid_utf8(v: &[u8]) -> bool {
             4 => {
                 let b1 = unsafe { *v.get_unchecked(index + 1) };
                 match (first, b1) {
-                    (0xF0, 0x90..=0xBF)
-                    | (0xF1..=0xF3, 0x80..=0xBF)
-                    | (0xF4, 0x80..=0x8F) => {}
-                    _ => return false,
+                    (0xF0, 0x90..=0xBF) | (0xF1..=0xF3, 0x80..=0xBF) | (0xF4, 0x80..=0x8F) => {}
+                    _ => return false
                 }
                 let b2 = unsafe { *v.get_unchecked(index + 2) };
                 if !is_continuation(b2) {
@@ -88,7 +88,7 @@ pub fn is_valid_utf8(v: &[u8]) -> bool {
                     return false;
                 }
             }
-            _ => return false,
+            _ => return false
         }
 
         index += w;
@@ -138,7 +138,5 @@ const UTF8_CHAR_WIDTH: &[u8; 256] = &[
     0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // C
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // D
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // E
-    4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // F
+    4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // F
 ];
-
-

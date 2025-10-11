@@ -1,8 +1,8 @@
 //! `snailx` provides a simple, zero-allocation interface for iterating over the arguments of a
 //! program.
-//! 
+//!
 //! This crate exposes lightweight, zero-copy iterators over program arguments:
-//! - [`args`] yields `&'static core::ffi::CStr`
+//! - [`args`] yields `&'static CStr`
 //! - [`str_args`] yields `&'static str`
 //!   - if the `assume_valid_str` feature is enabled, all arguments are assumed to be valid UTF-8
 //!   - if the `assume_valid_str` feature is disabled, invalid UTF-8 arguments are skipped
@@ -19,7 +19,7 @@
 #![deny(missing_docs)]
 extern crate core;
 
-// TODO: cleanup attrs, docs
+// TODO: cleanup attrs, docs, make sure everything is documented
 
 macro_rules! assume {
     // completely unreachable branches
@@ -82,12 +82,19 @@ mod ffi;
 mod cmdline;
 mod iter;
 
-#[cfg(any(debug_assertions, not(feature = "assume_valid_str")))]
-mod str_checks;
+#[cfg(any(debug_assertions, not(feature = "assume_valid_str")))] mod str_checks;
 
 pub use {
     cmdline::*,
+    ffi::minimal_cstr::CStr,
     iter::{args::*, mapped_args::*}
 };
+
+#[cfg(feature = "bench")]
+#[allow(missing_docs)]
+#[doc(hidden)]
+pub mod bench_helpers {
+    pub use crate::{cmdline::helpers::try_to_str, iter::helpers::len};
+}
 
 // TODO: tests
