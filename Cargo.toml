@@ -30,6 +30,7 @@ full_opt_bench = ["opt_bench", "std"]
 full_worst_bench = ["worst_bench", "std"]
 
 # benchmarking without std
+# with str checks
 pure_bench = ["bench", "no_cold"]
 # without str checks
 opt_bench = ["pure_bench", "assume_valid_str"]
