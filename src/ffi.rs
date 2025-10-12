@@ -18,35 +18,60 @@ extern "C" {
 }
 
 pub mod minimal_cstr {
-    use {
-        crate::ffi::strlen,
-        core::{slice},
-        super::c_char
-    };
+    use {super::c_char, core::marker::PhantomData};
+    #[cfg(any(feature = "std", feature = "to_core_cstr", debug_assertions))]
+    use {super::strlen, core::slice};
 
-    /// A very minimal CStr implementation, meant for use in place of `core::ffi::CStr`, which was
-    /// unstable before 1.64, and `std::ffi::CStr` which requires `std`.
-    pub struct CStr {
-        // TODO: just hold a *const c_char so that args_slice can be safe
-        _inner: [c_char]
+    /// A minimal CStr implementation for use in place of `core::ffi::CStr` (unstable before 1.64)
+    /// and `std::ffi::CStr` (requires `std`).
+    ///
+    /// To do anything meaningful with this, you must convert it to the standard library's fully
+    /// implemented version via [`to_stdlib`](CStr::to_stdlib).
+    ///
+    /// Do not call `to_stdlib` more than once, as every call runs `strlen` to determine the length
+    /// of the `CStr`.
+    #[repr(transparent)]
+    pub struct CStr<'a> {
+        inner: *const c_char,
+        _marker: PhantomData<&'a [c_char]>
     }
 
     #[allow(clippy::inline_always)]
-    impl CStr {
+    impl<'a> CStr<'a> {
         #[cfg(all(feature = "std", not(feature = "to_core_cstr")))]
         /// Converts this value into the `std` equivalent.
         #[must_use]
         #[inline(always)]
-        pub fn to_stdlib(&self) -> &std::ffi::CStr {
-            unsafe { &*(self as *const CStr as *const std::ffi::CStr) }
+        pub fn to_stdlib(&self) -> &'a std::ffi::CStr {
+            // SAFETY: from_ptr requires that the pointer is a valid CStr
+            unsafe {
+                assume!(!self.inner.is_null());
+                let bytes = slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1);
+                assume!(
+                    !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
+                    "CStr does not end with null byte"
+                );
+
+                &*(bytes as *const [u8] as *const std::ffi::CStr)
+            }
         }
 
         #[cfg(feature = "to_core_cstr")]
         /// Converts this value into the `core` equivalent.
         #[must_use]
         #[inline(always)]
-        pub const fn to_stdlib(&self) -> &core::ffi::CStr {
-            unsafe { &*(self as *const CStr as *const core::ffi::CStr) }
+        pub fn to_stdlib(&self) -> &'a core::ffi::CStr {
+            // SAFETY: from_ptr requires that the pointer is a valid CStr
+            unsafe {
+                assume!(!self.inner.is_null());
+                let bytes = slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1);
+                assume!(
+                    !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
+                    "CStr does not end with null byte"
+                );
+
+                &*(bytes as *const [u8] as *const core::ffi::CStr)
+            }
         }
 
         /// Creates a `CStr` from a pointer to its first byte.
@@ -64,15 +89,19 @@ pub mod minimal_cstr {
         ///   lifetime `'a`.
         /// - The nul terminator must be within `isize::MAX` bytes from `ptr`
         #[must_use]
-        #[inline]
-        pub unsafe fn from_ptr<'a>(p: *const u8) -> &'a CStr {
-            let len = strlen(p.cast());
+        #[inline(always)]
+        pub unsafe fn from_ptr(p: *const u8) -> CStr<'a> {
+            assume!(
+                dbg,
+                {
+                    let len = strlen(p.cast());
+                    let bytes = slice::from_raw_parts(p, len + 1);
+                    !bytes.is_empty() && bytes[len] == 0
+                },
+                "CStr does not end with null byte"
+            );
 
-            assume!(!p.is_null());
-            let bytes = slice::from_raw_parts(p, len + 1);
-            assume!(!bytes.is_empty() && bytes[len] == 0, "CStr does not end with null byte");
-
-            &*(bytes as *const [u8] as *const CStr)
+            CStr { inner: p, _marker: PhantomData }
         }
     }
 }

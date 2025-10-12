@@ -6,9 +6,8 @@ pub mod helpers {
     use core::mem::size_of;
 
     // does the same thing as back.offset_from_unsigned(current) because it wasn't stable until 1.87
-    #[allow(clippy::checked_conversions, missing_docs)]
+    #[allow(clippy::checked_conversions, clippy::must_use_candidate, missing_docs)]
     #[inline(always)]
-    #[allow(clippy::must_use_candidate)]
     pub fn len(cur: *const *const u8, end: *const *const u8) -> usize {
         assume!(end as usize >= cur as usize, "ptr::len requires `back >= current`");
         let byte_diff = (end as usize).wrapping_sub(cur as usize);

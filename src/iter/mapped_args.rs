@@ -27,8 +27,9 @@ pub struct MappedArgs<
 > {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
-    pub(crate) map: F /* MAYBEDO: below bc sometimes nth has a faster method
-                       * pub(crate) nth_map: F */
+    pub(crate) map: F 
+    // MAYBEDO: below bc sometimes nth has a faster method
+    // pub(crate) nth_map: F
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
@@ -42,8 +43,10 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 
         while self.cur != self.end {
             let p = self.cur;
+            // SAFETY: we just checked that `p < self.end`
             self.cur = unsafe { self.cur.add(1) };
 
+            // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
             if let Some(v) = (self.map)(unsafe { p.read() }) {
                 ret = Some(v);
                 break;
@@ -69,9 +72,11 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
         let mut ret = None;
 
         while self.cur != self.end {
+            // SAFETY: we just checked that `self.cur + n` is in bounds
             let p = unsafe { self.cur.add(n) };
             self.cur = unsafe { p.add(1) };
 
+            // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
             if let Some(v) = (self.map)(unsafe { p.read() }) {
                 ret = Some(v);
                 break;
@@ -92,6 +97,8 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 
         let mut i = 0;
         loop {
+            // SAFETY: we just checked that `self.cur + i` is in bounds, pointer is from argv which
+            // always contains valid pointers to cstrs
             if let Some(v) = (self.map)(unsafe { self.cur.add(i).read() }) {
                 acc = f(acc, v);
             }
@@ -117,6 +124,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
             return None;
         }
 
+        // SAFETY: we just checked that `self.cur < self.end`
         unsafe {
             self.end = self.end.sub(1);
             (self.map)(self.end.read())

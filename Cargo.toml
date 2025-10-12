@@ -23,16 +23,20 @@ all-features = true
 [features]
 # benchmarking with std
 # with str checks
-full_pure_bench = ["bench", "std"]
+full_pure_bench = ["pure_bench", "std"]
 # without str checks
 full_opt_bench = ["opt_bench", "std"]
+# worst case scenario
+full_worst_bench = ["worst_bench", "std"]
 
 # benchmarking without std
-# ...none with because it's redundant to bench
+pure_bench = ["bench", "no_cold"]
 # without str checks
-opt_bench = ["bench", "assume_valid_str"]
+opt_bench = ["pure_bench", "assume_valid_str"]
+# worst case scenario
+worst_bench = ["bench"]
 
-bench = ["no_cold"]
+bench = []
 
 std = []
 # removes #[cold] attrs on functions
@@ -50,8 +54,6 @@ to_core_cstr = []
 #name = "stdcmp"
 #path = "extra/bench.rs"
 #harness = false
-## let's not accidentally bench without this lol
-#required-features = ["bench"]
 #
 #[dev-dependencies]
 #criterion = "0.7.0"

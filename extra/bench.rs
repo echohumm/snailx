@@ -24,6 +24,7 @@ fn bench_snailx_iter_minimal(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -66,6 +67,7 @@ fn bench_snailx_nth_minimal(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -104,6 +106,7 @@ fn bench_iter_snailx_vs_std(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -169,6 +172,7 @@ fn bench_nth_snailx_vs_std(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -249,6 +253,7 @@ fn bench_snailx_iter_preset(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -296,6 +301,7 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
         );
     });
 
+    #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
             snailx::osstr_args,
@@ -324,9 +330,9 @@ fn bench_snailx_helpers(c: &mut Criterion) {
 
     group.bench_function("c_ptr_try_to_str", |b| {
         b.iter(|| {
-            black_box(snailx::bench_helpers::try_to_str(black_box(
-                black_box(const { b"afairlylongtypicalargcstr\0" }).as_ptr()
-            )))
+            black_box(snailx::bench_helpers::try_to_str(black_box(black_box(
+                const { b"afairlylongtypicalargcstr\0".as_ptr() }
+            ))))
         });
     });
 
@@ -345,6 +351,19 @@ fn bench_snailx_helpers(c: &mut Criterion) {
             },
             BatchSize::SmallInput
         );
+    });
+
+    group.bench_function("cstr/to_stdlib", |b| {
+        b.iter(|| {
+            black_box(
+                black_box(unsafe {
+                    snailx::CStr::from_ptr(black_box(
+                        const { b"fairlylongcstrargeventhoughlengthdoesntmatter\0".as_ptr() }
+                    ))
+                })
+                .to_stdlib()
+            );
+        });
     });
 
     group.finish();

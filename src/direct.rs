@@ -116,6 +116,7 @@ pub(crate) mod imp {
 	#[inline(always)]
 	#[cfg_attr(not(feature = "bench"), cold)]
     pub fn argc_argv() -> (u32, *const *const u8) {
+		// SAFETY: both calls returns a non-null pointer to valid data
         unsafe { (_NSGetArgc().read() as u32, _NSGetArgv().read().cast()) }
     }
 

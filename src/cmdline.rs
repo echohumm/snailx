@@ -6,10 +6,8 @@ use {
     },
     core::slice
 };
-// TODO: maybe make types non-send/sync like stdlib does. will require adding a field bc !bounds
-//  aren't stable
 
-/// Returns an iterator over the program's arguments as `&'static CStr`.
+/// Returns an iterator over the program's arguments as <code>[CStr](CStr)<'static></code>.
 #[must_use]
 #[inline]
 // cold because these are usually called once at startup
@@ -38,8 +36,10 @@ pub(crate) mod helpers {
         core::{mem::transmute, slice}
     };
 
-    #[allow(clippy::must_use_candidate, clippy::not_unsafe_ptr_arg_deref, missing_docs)]
+    #[allow(clippy::must_use_candidate, clippy::not_unsafe_ptr_arg_deref, clippy::transmute_bytes_to_str, missing_docs)]
+    #[inline]
     pub fn try_to_str(p: *const u8) -> Option<&'static str> {
+        // SAFETY: only called internally with valid CStr pointers from argv
         unsafe {
             assume!(!p.is_null());
             let len = strlen(p.cast());
@@ -50,7 +50,6 @@ pub(crate) mod helpers {
 
             #[cfg(not(feature = "assume_valid_str"))]
             if crate::str_checks::is_valid_utf8(str_bytes) {
-                #[allow(clippy::transmute_bytes_to_str)]
                 Some(transmute::<&'static [u8], &'static str>(str_bytes))
             } else {
                 None
@@ -63,16 +62,16 @@ pub(crate) mod helpers {
                     crate::str_checks::is_valid_utf8(str_bytes),
                     "invalid UTF-8 in CStr during conversion to str"
                 );
-                #[allow(clippy::transmute_bytes_to_str)]
                 Some(transmute::<&'static [u8], &'static str>(str_bytes))
             }
         }
     }
 
     #[cfg(feature = "std")]
-    #[allow(clippy::unnecessary_wraps)]
     #[inline]
+    #[allow(clippy::unnecessary_wraps)]
     pub fn to_osstr(p: *const u8) -> Option<&'static std::ffi::OsStr> {
+        // SAFETY: only called internally with valid CStr pointers from argv
         unsafe {
             assume!(!p.is_null());
             let len = strlen(p.cast());
@@ -84,6 +83,7 @@ pub(crate) mod helpers {
 
 /// Returns an iterator over the program's arguments as `&'static str`. Non-UTF-8 arguments are
 /// skipped.
+#[must_use]
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "no_cold"), cold)]
@@ -91,9 +91,10 @@ pub fn str_args() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static s
     map_args(helpers::try_to_str)
 }
 
-#[cfg(feature = "std")]
-/// Returns an iterator over the program's arguments as`&'static std::ffi::OsStr`. Requires the
+/// Returns an iterator over the program's arguments as `&'static std::ffi::OsStr`. Requires the
 /// `std` feature.
+#[cfg(feature = "std")]
+#[must_use]
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "no_cold"), cold)]
@@ -112,45 +113,41 @@ pub fn osstr_args()
 #[cfg_attr(not(feature = "no_cold"), cold)]
 pub fn arg_ptrs() -> &'static [*const u8] {
     let (argc, argv) = direct::argc_argv();
-    assume!(argv as usize != 0 || argc == 0, "argc is nonzero but argv is null");
+    assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
 
     if argc == 0 {
         return &[];
     }
 
+    // SAFETY: argv points to a valid slice of argc count pointers
     unsafe { slice::from_raw_parts(argv, argc as usize) }
 }
 
-/// Returns a slice of `&'static CStr`.
-///
-/// Prefer [`arg_ptrs`] or one of the other iterators. The references in this slice carry
-/// incorrect pointer metadata, which makes many `CStr` methods unsound.
-///
-/// # Safety
-///
-/// - Do not call any `CStr` method that relies on pointer metadata (length/bytes), such as
-///   `to_bytes`, `to_bytes_with_nul`, `to_str`, `bytes`, `count_bytes`, formatting
-///   (`Display`/`Debug`), indexing, or comparison methods.
-/// - Treat the returned `&'static CStr` values as opaque handles; do not inspect their contents.
-///
-/// If you're not absolutely sure you need this API, avoid it. Please just use [`arg_ptrs`].
+/// Returns a slice of <code>[CStr](CStr)<'static></code>.
 #[must_use]
 #[inline]
 #[cfg_attr(not(feature = "no_cold"), cold)]
-pub unsafe fn args_slice() -> &'static [&'static CStr] {
+pub fn args_slice() -> &'static [CStr<'static>] {
     let (argc, argv) = direct::argc_argv();
-    assume!(argv as usize != 0 || argc == 0, "argc is nonzero but argv is null");
+    assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
 
     if argc == 0 {
         return &[];
     }
 
-    slice::from_raw_parts(argv.cast::<&'static CStr>(), argc as usize)
+    // SAFETY: argv points to a valid slice of argc count pointers, CStr is repr(transparent) around
+    // a pointer
+    unsafe {
+        slice::from_raw_parts(argv.cast::<CStr<'static>>(), argc as usize)
+    }
 }
 
+#[allow(clippy::inline_always)]
+#[inline(always)]
 #[cfg_attr(not(feature = "no_cold"), cold)]
 fn back(argv: *const *const u8, argc: u32) -> *const *const u8 {
-    assume!(re, argv as usize != 0 || argc == 0);
-    // point to one-past-the-last element to follow standard exclusive-end iteration semantics
+    assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
+    // SAFETY: argv points to a valid slice of argc count pointers, this is one past the last but
+    // always decremented before deref
     unsafe { argv.add(argc as usize) }
 }

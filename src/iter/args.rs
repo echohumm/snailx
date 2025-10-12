@@ -12,7 +12,7 @@ use {
 };
 
 // not Copy because that nets a 2-5% performance improvement for some reason
-/// An iterator over program arguments as `&'static CStr`.
+/// An iterator over program arguments as <code>[CStr](CStr)<'static></code>.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Args {
     pub(crate) cur: *const *const u8,
@@ -40,19 +40,20 @@ impl Args {
 
 // most of these are copied or slightly adapted from slice::Iter
 impl Iterator for Args {
-    type Item = &'static CStr;
+    type Item = CStr<'static>;
 
-    // inline(always) nets a 5% performance loss. no inlining nets a 70% loss. normal inlining is
-    //  good.
+    // inline(always) nets a 5% performance loss. no inlining nets a 70% loss. normal inlining is good.
     #[inline]
-    fn next(&mut self) -> Option<&'static CStr> {
+    fn next(&mut self) -> Option<CStr<'static>> {
         if self.cur == self.end {
             return None;
         }
         assume!(self.cur < self.end);
 
         let p = self.cur;
+        // SAFETY: we just checked that `p < self.end`
         self.cur = unsafe { self.cur.add(1) };
+        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(p.read()) })
     }
 
@@ -63,29 +64,33 @@ impl Iterator for Args {
     }
 
     #[inline]
-    fn nth(&mut self, n: usize) -> Option<&'static CStr> {
+    fn nth(&mut self, n: usize) -> Option<CStr<'static>> {
         if n >= self.len() {
             self.cur = self.end;
             return None;
         }
 
+        // SAFETY: we just checked that `self.cur + n` is in bounds
         let p = unsafe { self.cur.add(n) };
         self.cur = unsafe { p.add(1) };
 
         assume!(!p.is_null());
 
+        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(p.read().cast()) })
     }
 }
 
 impl DoubleEndedIterator for Args {
     #[inline]
-    fn next_back(&mut self) -> Option<&'static CStr> {
+    fn next_back(&mut self) -> Option<CStr<'static>> {
         if self.cur == self.end {
             return None;
         }
 
+        // SAFETY: we just checked that `self.cur < self.end`
         self.end = unsafe { self.end.sub(1) };
+        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(self.end.read()) })
     }
 }

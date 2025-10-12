@@ -97,7 +97,6 @@ pub fn is_valid_utf8(v: &[u8]) -> bool {
     true
 }
 
-/// Given a first byte, determines how many bytes are in this UTF-8 character.
 #[must_use]
 #[inline]
 pub const fn utf8_char_width(b: u8) -> usize {
@@ -106,7 +105,6 @@ pub const fn utf8_char_width(b: u8) -> usize {
 
 const NONASCII_MASK: usize = usize::from_ne_bytes([0x80; size_of::<usize>()]);
 
-/// Returns `true` if any byte in the word `x` is nonascii (>= 128).
 #[inline]
 const fn contains_nonascii(x: usize) -> bool {
     (x & NONASCII_MASK) != 0
