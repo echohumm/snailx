@@ -1,22 +1,44 @@
 //! `snailx` provides a simple, zero-allocation interface for iterating over program arguments.
 //!
 //! This crate exposes lightweight, zero-copy iterators over program arguments:
-//! - [`args`] yields <code>[CStr](CStr)<'static></code>
-//! - [`str_args`] yields `&'static str`
+//! - [`args`] yields <code>[CStr]<'static></code>
+//! - [`args_utf8`] yields `&'static str`
 //!   - if the `assume_valid_str` feature is enabled, all arguments are assumed to be valid UTF-8
 //!   - if the `assume_valid_str` feature is disabled, invalid UTF-8 arguments are skipped
-//! - [`arg_ptrs`] returns the raw argv as `&'static [*const u8]`
+//! - [`argv_ptrs`] returns the raw argv as `&'static [*const u8]`
 //! - [`map_args`] lets you map each `*const u8` argument pointer into a custom type; `None` values
 //!   are skipped
-//! - [`osstr_args`] (with the `std` feature) yields `&'static std::ffi::OsStr`
+//! - [`args_os`] (with the `std` feature) yields `&'static std::ffi::OsStr`
 //!
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![no_implicit_prelude]
 #![deny(missing_docs)]
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
-extern crate core;
+
+macro_rules! import {
+    (use core::$($v:tt)*) => {
+        #[cfg(feature = "std")]
+        use std::$($v)*;
+        #[cfg(not(feature = "std"))]
+        use core::$($v)*;
+    };
+}
+
+macro_rules! switch {
+    (core::$($v:tt)*) => {{
+        #[cfg(feature = "std")]
+        {
+            ::std::$($v)*
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            ::core::$($v)*
+        }
+    }};
+}
 
 // TODO: see how many of these are actually useful
 macro_rules! assume {
@@ -27,18 +49,18 @@ macro_rules! assume {
             // SAFETY: this is unreachable
             #[allow(unused_unsafe)]
             unsafe {
-                core::hint::unreachable_unchecked();
+                switch!(core::hint::unreachable_unchecked(););
             }
         }
     };
-    
+
     // assumes expression is true
     ($e:expr) => {
         if !$e {
             // SAFETY: this is unreachable
             #[allow(unused_unsafe)]
             unsafe {
-                core::hint::unreachable_unchecked();
+                switch!(core::hint::unreachable_unchecked(););
             }
         }
     };
@@ -46,7 +68,7 @@ macro_rules! assume {
     (re, $e:expr) => {
         assume!($e, "entered unreachable code");
     };
-    
+
     // debug-only check with custom message
     (dbg, $e:expr, $($msg:tt)+) => {
         #[cfg(debug_assertions)]
@@ -54,7 +76,7 @@ macro_rules! assume {
             panic!($($msg)+);
         }
     };
-    
+
     // custom message for both debug and release
     ($e:expr, $($msg:tt)+) => {
         if !$e {
@@ -66,7 +88,7 @@ macro_rules! assume {
             #[cfg(not(debug_assertions))]
             #[allow(unused_unsafe)]
             unsafe {
-                core::hint::unreachable_unchecked();
+                switch!(core::hint::unreachable_unchecked(););
             }
         }
     };
@@ -86,7 +108,7 @@ pub use {
     iter::{args::*, mapped_args::*}
 };
 
-#[cfg(feature = "bench")]
+#[cfg(feature = "__bench")]
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod bench_helpers {

@@ -1,5 +1,8 @@
 #![allow(clippy::cast_possible_truncation, clippy::incompatible_msrv)]
 
+extern crate core;
+extern crate criterion;
+
 use {
     core::{hint::black_box, ptr, time::Duration},
     criterion::{BatchSize, Criterion}
@@ -27,7 +30,7 @@ fn bench_snailx_iter_minimal(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
                 for arg in black_box(args) {
                     black_box(arg);
@@ -39,7 +42,7 @@ fn bench_snailx_iter_minimal(c: &mut Criterion) {
 
     group.bench_function("str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
                 for s in black_box(args) {
                     black_box(s);
@@ -70,7 +73,7 @@ fn bench_snailx_nth_minimal(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -80,7 +83,7 @@ fn bench_snailx_nth_minimal(c: &mut Criterion) {
 
     group.bench_function("str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -109,7 +112,7 @@ fn bench_iter_snailx_vs_std(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
                 for arg in black_box(args) {
                     black_box(arg);
@@ -121,7 +124,7 @@ fn bench_iter_snailx_vs_std(c: &mut Criterion) {
 
     group.bench_function("snailx_str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
                 for s in black_box(args) {
                     black_box(s);
@@ -175,7 +178,7 @@ fn bench_nth_snailx_vs_std(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("snailx_osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -185,7 +188,7 @@ fn bench_nth_snailx_vs_std(c: &mut Criterion) {
 
     group.bench_function("snailx_str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
             },
@@ -256,7 +259,7 @@ fn bench_snailx_iter_preset(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
                 for arg in black_box(args) {
                     black_box(arg);
@@ -268,7 +271,7 @@ fn bench_snailx_iter_preset(c: &mut Criterion) {
 
     group.bench_function("str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
                 for s in black_box(args) {
                     black_box(s);
@@ -295,7 +298,7 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::args,
             |args| {
-                let _ = black_box(black_box(args).nth(black_box(0)));
+                let _ = black_box(black_box(args).nth(black_box(5)));
             },
             BatchSize::SmallInput
         );
@@ -304,9 +307,9 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
     #[cfg(feature = "std")]
     group.bench_function("osstr", |b| {
         b.iter_batched_ref(
-            snailx::osstr_args,
+            snailx::args_os,
             |args| {
-                let _ = black_box(black_box(args).nth(black_box(0)));
+                let _ = black_box(black_box(args).nth(black_box(5)));
             },
             BatchSize::SmallInput
         );
@@ -314,9 +317,9 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
 
     group.bench_function("str", |b| {
         b.iter_batched_ref(
-            snailx::str_args,
+            snailx::args_utf8,
             |args| {
-                let _ = black_box(black_box(args).nth(black_box(0)));
+                let _ = black_box(black_box(args).nth(black_box(5)));
             },
             BatchSize::SmallInput
         );

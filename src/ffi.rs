@@ -18,9 +18,18 @@ extern "C" {
 }
 
 pub mod minimal_cstr {
-    use {super::c_char, core::marker::PhantomData};
+    extern crate core;
+
+    use super::c_char;
+    import! {
+        use core::marker::PhantomData
+    }
+    // TODO: no cfgs on imports
+    #[cfg(any(feature = "std", feature = "to_core_cstr", debug_assertions))] use super::strlen;
     #[cfg(any(feature = "std", feature = "to_core_cstr", debug_assertions))]
-    use {super::strlen, core::slice};
+    import! {
+        use core::slice
+    }
 
     /// A minimal CStr implementation for use in place of `core::ffi::CStr` (unstable before 1.64)
     /// and `std::ffi::CStr` (requires `std`).
@@ -32,7 +41,7 @@ pub mod minimal_cstr {
     /// of the `CStr`.
     #[repr(transparent)]
     pub struct CStr<'a> {
-        inner: *const c_char,
+        _inner: *const c_char,
         _marker: PhantomData<&'a [c_char]>
     }
 
@@ -42,17 +51,17 @@ pub mod minimal_cstr {
         /// Converts this value into the `std` equivalent.
         #[must_use]
         #[inline(always)]
-        pub fn to_stdlib(&self) -> &'a std::ffi::CStr {
+        pub fn to_stdlib(&self) -> &'a ::std::ffi::CStr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
-                assume!(!self.inner.is_null());
-                let bytes = slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1);
+                assume!(!self._inner.is_null());
+                let bytes = slice::from_raw_parts(self._inner, strlen(self._inner.cast()) + 1);
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
                 );
 
-                &*(bytes as *const [u8] as *const std::ffi::CStr)
+                &*(bytes as *const [u8] as *const ::std::ffi::CStr)
             }
         }
 
@@ -63,8 +72,8 @@ pub mod minimal_cstr {
         pub fn to_stdlib(&self) -> &'a core::ffi::CStr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
-                assume!(!self.inner.is_null());
-                let bytes = slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1);
+                assume!(!self._inner.is_null());
+                let bytes = slice::from_raw_parts(self._inner, strlen(self._inner.cast()) + 1);
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
@@ -101,7 +110,7 @@ pub mod minimal_cstr {
                 "CStr does not end with null byte"
             );
 
-            CStr { inner: p, _marker: PhantomData }
+            CStr { _inner: p, _marker: PhantomData }
         }
     }
 }

@@ -8,6 +8,7 @@
       <w>osstring</w>
       <w>rustversion</w>
       <w>snailx</w>
+      <w>uclibc</w>
     </words>
   </dictionary>
 </component>

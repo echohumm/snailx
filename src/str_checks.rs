@@ -1,4 +1,8 @@
-use core::mem::size_of;
+extern crate core;
+
+import! {
+    use core::mem::size_of
+}
 
 #[inline(always)]
 pub fn is_valid_utf8(v: &[u8]) -> bool {

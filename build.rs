@@ -88,7 +88,10 @@ fn main() {
     let dst_path = raw_src.join("direct.rs");
 
     // only write if the destination differs to avoid unnecessary i/o
-    if read_to_string(&dst_path).map_or(true, |existing| existing != generated) {
-        write(&dst_path, generated.as_bytes()).expect("failed to write destination file");
+    if let Ok(existing) = read_to_string(&dst_path) {
+        if existing == generated {
+            exit(0);
+        }
     }
+    write(&dst_path, generated.as_bytes()).expect("failed to write destination file");
 }

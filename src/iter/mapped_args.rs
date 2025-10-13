@@ -1,9 +1,15 @@
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
-use {
-    super::helpers::{len, sz_hnt},
-    core::iter::FusedIterator
-};
+use super::helpers::{len, sz_hnt};
+
+import! {
+    use core::{
+        iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
+        marker::Copy,
+        ops::{Fn, FnMut},
+        option::Option::{self, None, Some}
+    }
+}
 
 // /// This enum is used to determine what to do when an argument fails to parse.
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,9 +33,8 @@ pub struct MappedArgs<
 > {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
-    pub(crate) map: F 
-    // MAYBEDO: below bc sometimes nth has a faster method
-    // pub(crate) nth_map: F
+    pub(crate) map: F /* MAYBEDO: below bc sometimes nth has a faster method
+                       * pub(crate) nth_map: F */
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
@@ -42,8 +47,8 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
         let mut ret = None;
 
         while self.cur != self.end {
+            // SAFETY: we just checked that `self.cur < self.end`
             let p = self.cur;
-            // SAFETY: we just checked that `p < self.end`
             self.cur = unsafe { self.cur.add(1) };
 
             // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
@@ -71,10 +76,12 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 
         let mut ret = None;
 
+        self.cur = unsafe { self.cur.add(n) };
+
         while self.cur != self.end {
             // SAFETY: we just checked that `self.cur + n` is in bounds
-            let p = unsafe { self.cur.add(n) };
-            self.cur = unsafe { p.add(1) };
+            let p = self.cur;
+            self.cur = unsafe { self.cur.add(1) };
 
             // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
             if let Some(v) = (self.map)(unsafe { p.read() }) {
@@ -125,25 +132,25 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
         }
 
         // SAFETY: we just checked that `self.cur < self.end`
-        unsafe {
-            self.end = self.end.sub(1);
-            (self.map)(self.end.read())
-        }
+        self.end = unsafe { self.end.sub(1) };
+
+        assume!(!self.end.is_null());
+
+        (self.map)(unsafe { self.end.read() })
     }
 
     #[inline]
     fn nth_back(&mut self, n: usize) -> Option<Ret> {
-        let len = self.len();
-        if n >= len {
+        if n >= self.len() {
             self.cur = self.end;
             return None;
         }
 
-        // Move end backward by n+1 (exclusive-end semantics) and read the element
-        unsafe {
-            self.end = self.end.sub(n + 1);
-            (self.map)(self.end.read())
-        }
+        self.end = unsafe { self.end.sub(n + 1) };
+
+        assume!(!self.end.is_null());
+        
+        (self.map)(unsafe { self.end.read() })
     }
 }
 

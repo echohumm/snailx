@@ -1,15 +1,21 @@
 // TODO: optimize this in general
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
-use {
-    crate::{
-        CStr,
-        MappedArgs,
-        cmdline::helpers::try_to_str,
-        iter::helpers::{len, sz_hnt}
-    },
-    core::iter::FusedIterator
+use crate::{
+    CStr,
+    MappedArgs,
+    cmdline::helpers::try_to_str,
+    iter::helpers::{len, sz_hnt}
 };
+
+import! {
+    use core::{
+        iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
+        marker::Copy,
+        ops::Fn,
+        option::Option::{self, None, Some}
+    }
+}
 
 // not Copy because that nets a 2-5% performance improvement for some reason
 /// An iterator over program arguments as <code>[CStr](CStr)<'static></code>.
@@ -30,7 +36,7 @@ impl Args {
         MappedArgs { cur: self.cur, end: self.end, map }
     }
 
-    /// Map this iterator to `&'static str`. Like [`crate::str_args`], but operates on an existing
+    /// Map this iterator to `&'static str`. Like [`crate::args_utf8`], but operates on an existing
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
@@ -42,7 +48,8 @@ impl Args {
 impl Iterator for Args {
     type Item = CStr<'static>;
 
-    // inline(always) nets a 5% performance loss. no inlining nets a 70% loss. normal inlining is good.
+    // inline(always) nets a 5% performance loss. no inlining nets a 70% loss. normal inlining is
+    // good.
     #[inline]
     fn next(&mut self) -> Option<CStr<'static>> {
         if self.cur == self.end {
@@ -50,9 +57,10 @@ impl Iterator for Args {
         }
         assume!(self.cur < self.end);
 
+        // SAFETY: we just checked that `self.cur < self.end`
         let p = self.cur;
-        // SAFETY: we just checked that `p < self.end`
         self.cur = unsafe { self.cur.add(1) };
+
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(p.read()) })
     }
@@ -74,10 +82,10 @@ impl Iterator for Args {
         let p = unsafe { self.cur.add(n) };
         self.cur = unsafe { p.add(1) };
 
-        assume!(!p.is_null());
+        assume!(!self.cur.is_null());
 
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-        Some(unsafe { CStr::from_ptr(p.read().cast()) })
+        Some(unsafe { CStr::from_ptr(p.read()) })
     }
 }
 
@@ -90,6 +98,22 @@ impl DoubleEndedIterator for Args {
 
         // SAFETY: we just checked that `self.cur < self.end`
         self.end = unsafe { self.end.sub(1) };
+        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
+        Some(unsafe { CStr::from_ptr(self.end.read()) })
+    }
+
+    #[inline]
+    fn nth_back(&mut self, n: usize) -> Option<CStr<'static>> {
+        if n >= self.len() {
+            self.end = self.cur;
+            return None;
+        }
+
+        // SAFETY: we just checked that `self.end - n` is in bounds
+        self.end = unsafe { self.end.sub(n + 1) };
+
+        assume!(!self.end.is_null());
+
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(self.end.read()) })
     }

@@ -1,9 +1,16 @@
 pub mod args;
 pub mod mapped_args;
 
+// TODO: make sure all nths are correct
+
 #[allow(clippy::inline_always)]
 pub mod helpers {
-    use core::mem::size_of;
+    import! {
+        use core::{
+            mem::size_of,
+            option::Option::{self, Some}
+        }
+    }
 
     // does the same thing as back.offset_from_unsigned(current) because it wasn't stable until 1.87
     #[allow(clippy::checked_conversions, clippy::must_use_candidate, missing_docs)]

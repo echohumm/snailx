@@ -4,9 +4,8 @@
 name = "snailx"
 version = "0.6.1"
 authors = ["echohumm <echo0humm@gmail.com>"]
-# TODO: lower msrv more? will need custom cstr
-edition = "2018"
-rust-version = "1.56.0"
+edition = "2015"
+rust-version = "1.48.0"
 description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
 license = "GPL-3 OR MIT"
 repository = "https://github.com/echohumm/snail"
@@ -18,43 +17,51 @@ build = "build.rs"
 exclude = ["/src/main.rs", "/extra/"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["std", "to_core_cstr"]
 
 [features]
-# benchmarking with std
-# with str checks
-full_pure_bench = ["pure_bench", "std"]
-# without str checks
-full_opt_bench = ["opt_bench", "std"]
-# worst case scenario
-full_worst_bench = ["worst_bench", "std"]
+# dev features, irrelevant to users
+## enables main.rs to be built below 1.66.0
+__testing_bl_166 = []
 
-# benchmarking without std
-# with str checks
-pure_bench = ["bench", "no_cold"]
-# without str checks
-opt_bench = ["pure_bench", "assume_valid_str"]
-# worst case scenario
-worst_bench = ["bench"]
+## benchmarking with std
+### with str checks
+__full_pure_bench = ["__pure_bench", "std"]
+### without str checks
+__full_opt_bench = ["__opt_bench", "std"]
+### worst case scenario
+__full_worst_bench = ["__worst_bench", "std"]
 
-bench = []
+## benchmarking without std
+### with str checks
+__pure_bench = ["__bench", "no_cold"]
+### without str checks
+__opt_bench = ["__pure_bench", "assume_valid_str"]
+### worst case scenario
+__worst_bench = ["__bench"]
 
+## for access to helpers to benchmark them
+__bench = []
+
+# actual features
+## enables osstr functions and snailx::CStr::to_stdlib
 std = []
-# removes #[cold] attrs on functions
+## removes #[cold] attrs on functions (primarily used for benchmarking, but users may use as well)
 no_cold = []
-# removes utf-8 validity checks when converting &[u8]s to &strs.
-# should usually not be used if using str_args, unless you trust your users not to enter dumb stuff
+## removes utf-8 validity checks when converting &[u8]s to &strs.
+## should usually not be used if using args_str, unless you trust your users not to enter dumb stuff
 assume_valid_str = []
-# switches snailx::CStr::to_stdlib from returning std::ffi::CStr to returning core::ffi::CStr.
-# requires rust ver >= 1.64
+## switches snailx::CStr::to_stdlib from returning std::ffi::CStr to returning core::ffi::CStr.
+## requires rust ver >= 1.64
 to_core_cstr = []
 
 # commented out until usage because it's a higher msrv than the crate
 
-#[[bench]]
-#name = "stdcmp"
-#path = "extra/bench.rs"
-#harness = false
-#
-#[dev-dependencies]
-#criterion = "0.7.0"
+[[bench]]
+# TODO: split into multiple benchmarks/files
+name = "bench_gen"
+path = "extra/bench.rs"
+harness = false
+
+[dev-dependencies]
+criterion = "0.7.0"
