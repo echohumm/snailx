@@ -71,19 +71,27 @@ fn main() {
     let direct_src = raw_src.join("direct.rs.src");
 
     // Let Cargo know when to rerun the build script for the Rust source generation
-    println!("cargo:rerun-if-changed={}", direct_src.display());
+    println!("cargo:rerun-if-changed={}", raw_src.display());
     println!("cargo:rerun-if-env-changed=RUSTC");
+    println!("cargo:rerun-if-env-changed=RUSTC_WRAPPER");
+    // println!("cargo:rerun-if-env-changed=WIN_BUFSIZE");
 
     let src_contents = read_to_string(direct_src).expect("failed to read source file");
 
-    let generated = if v.minor > 81 || v.major > 1 {
-        src_contents
-    } else {
-        src_contents.as_str().replace(
-            "#[unsafe(link_section = \".init_array.00098\")]",
-            "#[link_section = \".init_array.00098\"]"
-        )
-    };
+    let generated = src_contents
+        .as_str()
+        .replace(
+            "[Replace me with link section]",
+            if v.minor > 81 || v.major > 1 {
+                "#[unsafe(link_section = \".init_array.00098\")]"
+            } else {
+                "#[link_section = \".init_array.00098\"]"
+            }
+        );
+        // .replace(
+        //     "[Replace me with windows bufsize]",
+        //     &env::var("WIN_BUFSIZE").unwrap_or_else(|_| String::from("1024"))
+        // )
 
     let dst_path = raw_src.join("direct.rs");
 

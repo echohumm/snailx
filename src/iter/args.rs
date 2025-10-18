@@ -1,12 +1,7 @@
 // TODO: optimize this in general
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
-use crate::{
-    CStr,
-    MappedArgs,
-    cmdline::helpers::try_to_str,
-    iter::helpers::{len, sz_hnt}
-};
+use crate::{CStr, MappedArgs, cmdline::helpers::try_to_str, iter::helpers::len};
 
 import! {
     use core::{
@@ -26,6 +21,17 @@ pub struct Args {
 }
 
 impl Args {
+    /// Gets the remaining arguments in this iterator as a slice.
+    #[must_use]
+    pub fn as_slice(&self) -> &'static [CStr<'static>] {
+        unsafe {
+            switch!(core::slice::from_raw_parts(
+                self.cur.cast::<CStr<'static>>(),
+                len(self.cur, self.end)
+            ))
+        }
+    }
+
     /// Map this iterator to a different type. Like [`crate::map_args`], but operates on an existing
     /// iterator.
     #[must_use]
@@ -33,14 +39,58 @@ impl Args {
         &self,
         map: F
     ) -> MappedArgs<Ret, F> {
-        MappedArgs { cur: self.cur, end: self.end, map }
+        MappedArgs {
+            cur: self.cur,
+            end: self.end,
+            map,
+            // assume fallible for safety
+            #[cfg(feature = "infallible_map")]
+            fallible: true
+        }
+    }
+
+    #[cfg(feature = "infallible_map")]
+    /// Map this iterator to a different type. Like [`crate::map_args_infallible`], but
+    /// operates on an existing iterator.
+    #[must_use]
+    pub fn map_ty_infallible<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
+        &self,
+        map: F
+    ) -> MappedArgs<Ret, F> {
+        MappedArgs { cur: self.cur, end: self.end, map, fallible: false }
     }
 
     /// Map this iterator to `&'static str`. Like [`crate::args_utf8`], but operates on an existing
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
-        MappedArgs { cur: self.cur, end: self.end, map: try_to_str }
+        MappedArgs {
+            cur: self.cur,
+            end: self.end,
+            map: try_to_str,
+            #[cfg(all(feature = "infallible_map", not(feature = "assume_valid_str")))]
+            fallible: true,
+            // assume_valid_str makes the map "infallible"
+            #[cfg(all(feature = "infallible_map", feature = "assume_valid_str"))]
+            fallible: false
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// Map this iterator to `&'static OsStr`. Like [`crate::args_os`], but operates on an existing
+    /// iterator.
+    #[must_use]
+    pub fn map_os(
+        &self
+    ) -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>>
+    {
+        MappedArgs {
+            cur: self.cur,
+            end: self.end,
+            map: crate::cmdline::helpers::to_osstr,
+            #[cfg(feature = "infallible_map")]
+            fallible: false
+        }
     }
 }
 
@@ -68,7 +118,8 @@ impl Iterator for Args {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        sz_hnt(self.cur, self.end)
+        let len = len(self.cur, self.end);
+        (len, Some(len))
     }
 
     #[inline]

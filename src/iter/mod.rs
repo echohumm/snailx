@@ -6,10 +6,7 @@ pub mod mapped_args;
 #[allow(clippy::inline_always)]
 pub mod helpers {
     import! {
-        use core::{
-            mem::size_of,
-            option::Option::{self, Some}
-        }
+        use core::mem::size_of
     }
 
     // does the same thing as back.offset_from_unsigned(current) because it wasn't stable until 1.87
@@ -26,11 +23,5 @@ pub mod helpers {
         assume!(byte_diff <= (isize::MAX as usize), "distance must be <= isize::MAX bytes");
 
         byte_diff >> elem_size.trailing_zeros()
-    }
-
-    #[inline(always)]
-    pub fn sz_hnt(cur: *const *const u8, end: *const *const u8) -> (usize, Option<usize>) {
-        let len = len(cur, end);
-        (len, Some(len))
     }
 }

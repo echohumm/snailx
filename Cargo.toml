@@ -21,6 +21,9 @@ features = ["std", "to_core_cstr"]
 
 [features]
 # dev features, irrelevant to users
+## causes tests to cause ub with a theoretically impossible case
+__test_cause_ub = []
+
 ## enables main.rs to be built below 1.66.0
 __testing_bl_166 = []
 
@@ -54,14 +57,22 @@ assume_valid_str = []
 ## switches snailx::CStr::to_stdlib from returning std::ffi::CStr to returning core::ffi::CStr.
 ## requires rust ver >= 1.64
 to_core_cstr = []
+## enables infallible maps in MappedArgs with a boolean flag
+infallible_map = []
 
 # commented out until usage because it's a higher msrv than the crate
 
-[[bench]]
-# TODO: split into multiple benchmarks/files
-name = "bench_gen"
-path = "extra/bench.rs"
-harness = false
+#[[bench]]
+## TODO: split into multiple benchmarks/files
+#name = "bench_gen"
+#path = "extra/bench.rs"
+#harness = false
+#required-features = ["__bench"]
+#
+#[dev-dependencies]
+#criterion = "0.7.0"
 
-[dev-dependencies]
-criterion = "0.7.0"
+[[test]]
+name = "tests_gen"
+path = "extra/tests.rs"
+required-features = ["__bench", "std"]

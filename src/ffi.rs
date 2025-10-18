@@ -14,6 +14,7 @@ pub type c_int = i32;
 pub type c_uint = u32;
 
 extern "C" {
+    /// Gets the length of a C-style string by finding the first 0 byte after the given pointer.
     pub fn strlen(s: *const c_char) -> size_t;
 }
 
@@ -22,14 +23,11 @@ pub mod minimal_cstr {
 
     use super::c_char;
     import! {
-        use core::marker::PhantomData
+        use core::{marker::PhantomData, cmp::PartialEq}
     }
-    // TODO: no cfgs on imports
-    #[cfg(any(feature = "std", feature = "to_core_cstr", debug_assertions))] use super::strlen;
-    #[cfg(any(feature = "std", feature = "to_core_cstr", debug_assertions))]
-    import! {
-        use core::slice
-    }
+    use super::strlen;
+    
+    // TODO: make this a full-fledged CStr implementation so no need for to_stdlib
 
     /// A minimal CStr implementation for use in place of `core::ffi::CStr` (unstable before 1.64)
     /// and `std::ffi::CStr` (requires `std`).
@@ -40,13 +38,44 @@ pub mod minimal_cstr {
     /// Do not call `to_stdlib` more than once, as every call runs `strlen` to determine the length
     /// of the `CStr`.
     #[repr(transparent)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct CStr<'a> {
-        _inner: *const c_char,
+        inner: *const c_char,
         _marker: PhantomData<&'a [c_char]>
+    }
+    
+    impl PartialEq<*const u8> for CStr<'_> {
+        #[inline(always)]
+        fn eq(&self, other: &*const u8) -> bool {
+            self.inner == *other
+        }
+    }
+    impl<'a> PartialEq<CStr<'a>> for *const u8 {
+        #[inline(always)]
+        fn eq(&self, other: &CStr<'a>) -> bool {
+            *self == other.inner
+        }
     }
 
     #[allow(clippy::inline_always)]
+    #[allow(clippy::len_without_is_empty)]
     impl<'a> CStr<'a> {
+        /// Gets a pointer to the start of this `CStr`.
+        #[must_use]
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *const u8 {
+            self.inner.cast()
+        }
+        
+        /// Gets the length of this `CStr`.
+        /// 
+        /// Avoid calling this function more than once.
+        #[must_use]
+        #[inline(always)]
+        pub fn len(&self) -> usize {
+            unsafe { strlen(self.inner) }
+        }
+        
         #[cfg(all(feature = "std", not(feature = "to_core_cstr")))]
         /// Converts this value into the `std` equivalent.
         #[must_use]
@@ -54,8 +83,8 @@ pub mod minimal_cstr {
         pub fn to_stdlib(&self) -> &'a ::std::ffi::CStr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
-                assume!(!self._inner.is_null());
-                let bytes = slice::from_raw_parts(self._inner, strlen(self._inner.cast()) + 1);
+                assume!(!self.inner.is_null());
+                let bytes = switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
@@ -72,8 +101,8 @@ pub mod minimal_cstr {
         pub fn to_stdlib(&self) -> &'a core::ffi::CStr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
-                assume!(!self._inner.is_null());
-                let bytes = slice::from_raw_parts(self._inner, strlen(self._inner.cast()) + 1);
+                assume!(!self.inner.is_null());
+                let bytes = switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
@@ -104,13 +133,13 @@ pub mod minimal_cstr {
                 dbg,
                 {
                     let len = strlen(p.cast());
-                    let bytes = slice::from_raw_parts(p, len + 1);
+                    let bytes = switch!(core::slice::from_raw_parts(p, len + 1));
                     !bytes.is_empty() && bytes[len] == 0
                 },
                 "CStr does not end with null byte"
             );
 
-            CStr { _inner: p, _marker: PhantomData }
+            CStr { inner: p, _marker: PhantomData }
         }
     }
 }

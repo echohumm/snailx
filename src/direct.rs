@@ -16,6 +16,8 @@ pub fn argc_argv() -> (u32, *const *const u8) {
 /// Note that this does not actually modify the values of `argc` and `argv`, only the atomic used by
 /// `snailx` to access them.
 ///
+/// This atomic is always accessed with [`Relaxed`](core::sync::atomic::Ordering::Relaxed) ordering.
+///
 /// # Safety
 ///
 /// The caller must ensure it is safe to modify `argc` and `argv`, and that no concurrent access is
@@ -27,84 +29,76 @@ pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *
     imp::set_argc_argv(argc, argv)
 }
 
-macro_rules! cfgr {
-    ($($after:tt)*) => {
-		#[allow(unexpected_cfgs)]
-		#[cfg(any(
-			target_os = "linux",
-			target_os = "android",
-			target_os = "freebsd",
-			target_os = "dragonfly",
-			target_os = "netbsd",
-			target_os = "openbsd",
-			target_os = "cygwin",
-			target_os = "solaris",
-			target_os = "illumos",
-			target_os = "emscripten",
-			target_os = "haiku",
-			target_os = "hermit",
-			target_os = "l4re",
-			target_os = "fuchsia",
-			target_os = "redox",
-			target_os = "vxworks",
-			target_os = "horizon",
-			target_os = "aix",
-			target_os = "nto",
-			target_os = "hurd",
-			target_os = "rtems",
-			target_os = "nuttx",
-		))]
-		$($after)*
-	};
-}
-
-cfgr! {
-    pub(crate) mod imp {
-        extern crate core;
-        use {
-            crate::ffi::{c_int, c_uint},
-        };
-        import! {
+#[allow(unknown_lints, unexpected_cfgs)]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "cygwin",
+    target_os = "solaris",
+    target_os = "illumos",
+    target_os = "emscripten",
+    target_os = "haiku",
+    target_os = "hermit",
+    target_os = "l4re",
+    target_os = "fuchsia",
+    target_os = "redox",
+    target_os = "vxworks",
+    target_os = "horizon",
+    target_os = "aix",
+    target_os = "nto",
+    target_os = "hurd",
+    target_os = "rtems",
+    target_os = "nuttx",
+))]
+pub(crate) mod imp {
+    extern crate core;
+    use {
+        crate::ffi::{c_int, c_uint},
+    };
+    import! {
             use core::{
                 ptr,
                 sync::atomic::{AtomicU32, AtomicPtr, Ordering},
             }
         }
 
-        static ARGC: AtomicU32 = AtomicU32::new(0);
-        static ARGV: AtomicPtr<*const u8> = AtomicPtr::new(ptr::null_mut());
+    static ARGC: AtomicU32 = AtomicU32::new(0);
+    static ARGV: AtomicPtr<*const u8> = AtomicPtr::new(ptr::null_mut());
 
-        #[cfg(all(target_os = "linux", target_env = "gnu"))]
-        #[used]
-        #[unsafe(link_section = ".init_array.00098")]
-        static INIT: extern "C" fn(c_int, *const *const u8, *const *const u8) = {
-            extern "C" fn init_wrapper(
-                argc: c_int,
-                argv: *const *const u8,
-                _: *const *const u8
-            ) {
-                #[allow(clippy::cast_sign_loss)]
-                ARGC.store(argc as c_uint, Ordering::Relaxed);
-                ARGV.store(argv as *mut *const u8, Ordering::Relaxed);
-            }
-            init_wrapper
-        };
-
-        #[inline(always)]
-        #[cfg_attr(not(feature = "__bench"), cold)]
-        pub fn argc_argv() -> (u32, *const *const u8) {
-            let argv = ARGV.load(Ordering::Relaxed);
-
-            (if argv.is_null() { 0 } else { ARGC.load(Ordering::Relaxed) }, argv.cast())
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[used]
+    #[unsafe(link_section = ".init_array.00098")]
+    static INIT: extern "C" fn(c_int, *const *const u8, *const *const u8) = {
+        extern "C" fn init_wrapper(
+            argc: c_int,
+            argv: *const *const u8,
+            _: *const *const u8
+        ) {
+            #[allow(clippy::cast_sign_loss)]
+            ARGC.store(argc as c_uint, Ordering::Relaxed);
+            ARGV.store(argv as *mut *const u8, Ordering::Relaxed);
         }
+        init_wrapper
+    };
 
-        #[cfg_attr(not(feature = "__bench"), cold)]
-        pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *const u8) {
-            let old_argv = ARGV.swap(argv as *mut _, Ordering::Relaxed) as *const *const u8;
-            let old_argc = ARGC.swap(argc as c_uint, Ordering::Relaxed);
+    #[inline(always)]
+    #[cfg_attr(not(feature = "__bench"), cold)]
+    pub fn argc_argv() -> (u32, *const *const u8) {
+        let argv = ARGV.load(Ordering::Relaxed);
 
-            (if old_argv.is_null() { 0 } else { old_argc }, old_argv)
-        }
+        (if argv.is_null() { 0 } else { ARGC.load(Ordering::Relaxed) }, argv.cast())
+    }
+
+    #[cfg_attr(not(feature = "__bench"), cold)]
+    pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *const u8) {
+        let old_argv = ARGV.swap(argv as *mut _, Ordering::Relaxed) as *const *const u8;
+        let old_argc = ARGC.swap(argc as c_uint, Ordering::Relaxed);
+
+        (if old_argv.is_null() { 0 } else { old_argc }, old_argv)
     }
 }
 

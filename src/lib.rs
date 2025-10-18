@@ -18,6 +18,8 @@
 #![deny(missing_docs)]
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
+// TODO: use super:: where applicable, examples for all public api
+
 macro_rules! import {
     (use core::$($v:tt)*) => {
         #[cfg(feature = "std")]
@@ -27,6 +29,8 @@ macro_rules! import {
     };
 }
 
+#[cfg_attr(feature = "__bench", macro_export)]
+/// helper macro to switch between `std` and `core` based on whether `no_std` is on.
 macro_rules! switch {
     (core::$($v:tt)*) => {{
         #[cfg(feature = "std")]
@@ -40,9 +44,8 @@ macro_rules! switch {
     }};
 }
 
-// TODO: see how many of these are actually useful
 macro_rules! assume {
-    // completely unreachable branches
+    // completely unreachable branchesp
     // assumes expression is false
     (!$e:expr) => {
         if $e {
@@ -112,7 +115,7 @@ pub use {
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod bench_helpers {
-    pub use crate::{cmdline::helpers::try_to_str, iter::helpers::len};
+    pub use {cmdline::helpers::try_to_str, ffi::strlen, iter::helpers::len};
+    #[cfg(feature = "std")]
+    pub use cmdline::helpers::to_osstr;
 }
-
-// TODO: tests

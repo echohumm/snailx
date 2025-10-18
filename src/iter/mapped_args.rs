@@ -1,10 +1,10 @@
 #![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
 
-use super::helpers::{len, sz_hnt};
+use {super::helpers::len, CStr};
 
 import! {
     use core::{
-        iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
+        iter::{DoubleEndedIterator, Iterator},
         marker::Copy,
         ops::{Fn, FnMut},
         option::Option::{self, None, Some}
@@ -33,8 +33,40 @@ pub struct MappedArgs<
 > {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
-    pub(crate) map: F /* MAYBEDO: below bc sometimes nth has a faster method
-                       * pub(crate) nth_map: F */
+    pub(crate) map: F,
+    #[cfg(feature = "infallible_map")]
+    pub(crate) fallible: bool
+}
+
+impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> MappedArgs<Ret, F> {
+    /// Gets the remaining arguments in this iterator as a slice.
+    #[must_use]
+    pub fn as_slice(&self) -> &'static [CStr<'static>] {
+        unsafe {
+            switch!(core::slice::from_raw_parts(
+                self.cur.cast::<CStr<'static>>(),
+                len(self.cur, self.end)
+            ))
+        }
+    }
+
+    /// Gets the remaining length of items in this iterator.
+    ///
+    /// Returns `None` if `infallible_map` is disabled or this iterator's mapping function is marked
+    /// as fallible. If `infallible_map` is enabled and this iterator is marked as infallible,
+    /// returns `Some(len)`.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    pub fn len(&self) -> Option<usize> {
+        #[cfg(not(feature = "infallible_map"))]
+        {
+            None
+        }
+        #[cfg(feature = "infallible_map")]
+        {
+            if self.fallible { None } else { Some(len(self.cur, self.end)) }
+        }
+    }
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
@@ -61,15 +93,35 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
         ret
     }
 
+    /// Returns the bounds on the remaining length of the iterator.
+    ///
+    /// Specifically, `size_hint()` returns a tuple where the first element
+    /// is the lower bound, and the second element is the upper bound.
+    ///
+    /// The upper bound will always be `Some(len)`, where `len` is the number of elements remaining
+    /// in the iterator if the mapping function returns `Some` for every element.
+    ///
+    /// If `infallible_map` is disabled or this iterator's mapping function has been marked as
+    /// fallible, the lower bound will be 0. If `infallible_map` is enabled and this iterator is
+    /// marked as infallible, the lower bound will also be `len`.
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        sz_hnt(self.cur, self.end)
+        #[cfg(not(feature = "infallible_map"))]
+        // 0 lower bound because all args may be skipped, len upper bound because all may be fine
+        {
+            (0, Some(len(self.cur, self.end)))
+        }
+        #[cfg(feature = "infallible_map")]
+        {
+            let len = len(self.cur, self.end);
+            if self.fallible { (0, Some(len)) } else { (len, Some(len)) }
+        }
     }
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
-        if n >= self.len() {
+        if n >= len(self.cur, self.end) {
             self.cur = self.end;
             return None;
         }
@@ -95,7 +147,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 
     #[inline]
     fn fold<B, G: FnMut(B, Ret) -> B>(self, init: B, mut f: G) -> B {
-        let len = self.len();
+        let len = len(self.cur, self.end);
         if len == 0 {
             return init;
         }
@@ -124,43 +176,61 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
 impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
     for MappedArgs<Ret, F>
 {
-    // TODO: skip like next and nth do
+    // TODO: make sure these skip correctly
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
-        if self.cur == self.end {
-            return None;
+        let mut ret = None;
+
+        while self.cur != self.end {
+            // SAFETY: we just checked that `self.cur < self.end`
+            self.end = unsafe { self.end.sub(1) };
+
+            assume!(!self.end.is_null());
+
+            if let Some(v) = (self.map)(unsafe { self.end.read() }) {
+                ret = Some(v);
+                break;
+            }
         }
 
-        // SAFETY: we just checked that `self.cur < self.end`
-        self.end = unsafe { self.end.sub(1) };
-
-        assume!(!self.end.is_null());
-
-        (self.map)(unsafe { self.end.read() })
+        ret
     }
 
     #[inline]
     fn nth_back(&mut self, n: usize) -> Option<Ret> {
-        if n >= self.len() {
+        if n >= len(self.cur, self.end) {
             self.cur = self.end;
             return None;
         }
 
-        self.end = unsafe { self.end.sub(n + 1) };
+        let mut ret = None;
 
-        assume!(!self.end.is_null());
-        
-        (self.map)(unsafe { self.end.read() })
+        self.end = unsafe { self.end.sub(n) };
+
+        while self.cur != self.end {
+            // SAFETY: we just checked that `self.cur < self.end`
+            self.end = unsafe { self.end.sub(1) };
+
+            if let Some(v) = (self.map)(unsafe { self.end.read() }) {
+                ret = Some(v);
+                break;
+            }
+        }
+
+        ret
     }
 }
 
-impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> ExactSizeIterator
-    for MappedArgs<Ret, F>
-{
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    fn len(&self) -> usize {
-        len(self.cur, self.end)
-    }
-}
-impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F> {}
+// removed as i realized neither of these fit the functionality of MappedArgs
+//
+// impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> ExactSizeIterator
+//     for MappedArgs<Ret, F>
+// {
+//     #[allow(clippy::inline_always)]
+//     #[inline(always)]
+//     fn len(&self) -> usize {
+//         len(self.cur, self.end)
+//     }
+// }
+// impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F>
+// {}

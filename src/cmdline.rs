@@ -9,6 +9,17 @@ import! {
 }
 
 /// Returns an iterator over the program's arguments as <code>[CStr](CStr)<'static></code>.
+///
+/// # Examples
+///
+/// ```rust
+/// # #![cfg(feature = "std")]
+/// # use snailx::args;
+///
+/// for arg in args().map(|v| v.to_stdlib()) {
+///     println!("{}", arg.to_string_lossy());
+/// }
+/// ```
 #[must_use]
 #[inline]
 // cold because these are usually called once at startup
@@ -20,6 +31,9 @@ pub fn args() -> Args {
 
 /// Returns an iterator that applies `map` to each argument (`*const u8`). If `map` returns
 /// `None`, that argument is skipped.
+///
+/// The mapping function is assumed to be fallible, so `map_args().size_hint()` will return
+/// `(0, Some(len))`.
 #[must_use]
 #[inline]
 #[cfg_attr(not(feature = "no_cold"), cold)]
@@ -27,7 +41,30 @@ pub fn map_args<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
     map: F
 ) -> MappedArgs<Ret, F> {
     let (argc, argv) = direct::argc_argv();
-    MappedArgs { cur: argv, end: helpers::back(argv, argc), map }
+    MappedArgs {
+        cur: argv,
+        end: helpers::back(argv, argc),
+        map,
+        #[cfg(feature = "infallible_map")]
+        fallible: true
+    }
+}
+
+#[cfg(feature = "infallible_map")]
+/// Returns an iterator that applies `map` to each argument (`*const u8`).
+///
+/// The mapping function is assumed to be infallible, so `map_args().size_hint()` will return
+/// `(len, Some(len))`.
+///
+/// `map` should never return `None`, but in the case that it does, it will be skipped.
+#[must_use]
+#[inline]
+#[cfg_attr(not(feature = "no_cold"), cold)]
+pub fn map_args_infallible<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
+    map: F
+) -> MappedArgs<Ret, F> {
+    let (argc, argv) = direct::argc_argv();
+    MappedArgs { cur: argv, end: helpers::back(argv, argc), map, fallible: false }
 }
 
 /// Returns an iterator over the program's arguments as `&'static str`. Non-UTF-8 arguments are
@@ -36,7 +73,6 @@ pub fn map_args<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "no_cold"), cold)]
-// TODO: better name for this than current/orig(str_args)
 pub fn args_utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
     map_args(helpers::try_to_str)
 }
@@ -50,30 +86,21 @@ pub fn args_utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static 
 #[cfg_attr(not(feature = "no_cold"), cold)]
 pub fn args_os()
 -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>> {
-    map_args(helpers::to_osstr)
+    #[cfg(not(feature = "infallible_map"))]
+    {
+        map_args(helpers::to_osstr)
+    }
+    #[cfg(feature = "infallible_map")]
+    {
+        map_args_infallible(helpers::to_osstr)
+    }
 }
 
-/// Returns the raw argv as a slice of pointers: `&'static [*const u8]`.
+/// Returns a slice of <code>[CStr](CStr)<'static></code>.
 ///
 /// The slice references the OS-provided storage and should usually not be mutated.
 ///
 /// This is a simpler way to iterate over the elements, if preferred.
-#[must_use]
-#[inline]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn argv_ptrs() -> &'static [*const u8] {
-    let (argc, argv) = direct::argc_argv();
-    assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
-
-    if argc == 0 {
-        return &[];
-    }
-
-    // SAFETY: argv points to a valid slice of argc count pointers
-    unsafe { slice::from_raw_parts(argv, argc as usize) }
-}
-
-/// Returns a slice of <code>[CStr](CStr)<'static></code>.
 #[must_use]
 #[inline]
 #[cfg_attr(not(feature = "no_cold"), cold)]
@@ -98,13 +125,13 @@ pub(crate) mod helpers {
         use core::{mem::transmute, slice, option::Option::{self, Some}}
     }
 
+    #[inline]
     #[allow(
         clippy::must_use_candidate,
         clippy::not_unsafe_ptr_arg_deref,
         clippy::transmute_bytes_to_str,
         missing_docs
     )]
-    #[inline]
     pub fn try_to_str(p: *const u8) -> Option<&'static str> {
         // SAFETY: only called internally with valid CStr pointers from argv
         unsafe {
@@ -136,7 +163,7 @@ pub(crate) mod helpers {
 
     #[cfg(feature = "std")]
     #[inline]
-    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::unnecessary_wraps, missing_docs)]
     pub fn to_osstr(p: *const u8) -> Option<&'static ::std::ffi::OsStr> {
         // SAFETY: only called internally with valid CStr pointers from argv
         unsafe {
@@ -156,15 +183,15 @@ pub(crate) mod helpers {
         // but always decremented before deref
         unsafe { argv.add(argc as usize) }
     }
-    
+
     // pub fn front(argv: *const *const u8, argc: u32) -> *const *const u8 {
     //     assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
     //
     //     if argc == 0 {
     //         return argv;
     //     } else {
-    //         // SAFETY: if argc != 0, argv != null. this is one before the first element, but always
-    //         // incremented before deref
+    //         // SAFETY: if argc != 0, argv != null. this is one before the first element, but
+    // always         // incremented before deref
     //         unsafe {
     //             argv.sub(1)
     //         }
