@@ -1,14 +1,14 @@
 //! `snailx` provides a simple, zero-allocation interface for iterating over program arguments.
 //!
 //! This crate exposes lightweight, zero-copy iterators over program arguments:
-//! - [`args`] yields <code>[CStr]<'static></code>
-//! - [`args_utf8`] yields `&'static str`
+//! - [`Args::new`](crate::Args::new) yields <code>[CStr]<'static></code>
+//! - [`MappedArgs::utf8`](crate::MappedArgs::utf8) yields `&'static str`
 //!   - if the `assume_valid_str` feature is enabled, all arguments are assumed to be valid UTF-8
 //!   - if the `assume_valid_str` feature is disabled, invalid UTF-8 arguments are skipped
-//! - [`argv_ptrs`] returns the raw argv as `&'static [*const u8]`
-//! - [`map_args`] lets you map each `*const u8` argument pointer into a custom type; `None` values
+//! - [`direct::argc_argv`](crate::direct::argc_argv) returns the raw `(argc, argv)`
+//! - [`MappedArgs::new`](crate::MappedArgs::new) lets you map each `*const u8` argument pointer into a custom type; `None` values
 //!   are skipped
-//! - [`args_os`] (with the `std` feature) yields `&'static std::ffi::OsStr`
+//! - [`MappedArgs::osstr`](crate::MappedArgs::osstr) (with the `std` feature) yields `&'static std::ffi::OsStr`
 //!
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
@@ -19,6 +19,7 @@
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
 // TODO: use super:: where applicable, examples for all public api
+// TODO: clean up imports and stuff using import! macro (cargo fmt doesn't)
 
 macro_rules! import {
     (use core::$($v:tt)*) => {
@@ -45,7 +46,7 @@ macro_rules! switch {
 }
 
 macro_rules! assume {
-    // completely unreachable branchesp
+    // completely unreachable branches
     // assumes expression is false
     (!$e:expr) => {
         if $e {

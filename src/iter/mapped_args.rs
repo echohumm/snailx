@@ -1,11 +1,10 @@
-#![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
+#![allow(clippy::while_let_on_iterator, unused_qualifications)]
 
-use {super::helpers::len, CStr};
+use {super::helpers::len, CStr, cmdline::helpers, direct};
 
 import! {
     use core::{
         iter::{DoubleEndedIterator, Iterator},
-        marker::Copy,
         ops::{Fn, FnMut},
         option::Option::{self, None, Some}
     }
@@ -27,10 +26,7 @@ import! {
 /// An iterator that maps each argument using a user-provided function. If the mapping returns
 /// `None`, that argument is skipped.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MappedArgs<
-    Ret,
-    F: Fn(*const u8) -> Option<Ret> + Copy + 'static = fn(*const u8) -> Option<Ret>
-> {
+pub struct MappedArgs<Ret, F: Fn(*const u8) -> Option<Ret> = fn(*const u8) -> Option<Ret>> {
     pub(crate) cur: *const *const u8,
     pub(crate) end: *const *const u8,
     pub(crate) map: F,
@@ -38,9 +34,81 @@ pub struct MappedArgs<
     pub(crate) fallible: bool
 }
 
-impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> MappedArgs<Ret, F> {
+impl MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
+    /// Returns an iterator over the program's arguments as `&'static str`. Non-UTF-8 arguments are
+    /// skipped.
+    #[must_use]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
+        MappedArgs::new(helpers::try_to_str)
+    }
+}
+
+#[cfg(feature = "std")]
+impl MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>> {
+    /// Returns an iterator over the program's arguments as `&'static std::ffi::OsStr`. Requires the
+    /// `std` feature.
+    #[must_use]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn osstr()
+    -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>>
+    {
+        #[cfg(not(feature = "infallible_map"))]
+        {
+            MappedArgs::new(helpers::to_osstr)
+        }
+        #[cfg(feature = "infallible_map")]
+        {
+            MappedArgs::new_infallible(helpers::to_osstr)
+        }
+    }
+}
+
+#[allow(clippy::len_without_is_empty)]
+impl<Ret, F: Fn(*const u8) -> Option<Ret>> MappedArgs<Ret, F> {
+    /// Returns an iterator that applies `map` to each argument (`*const u8`). If `map` returns
+    /// `None`, that argument is skipped.
+    ///
+    /// The mapping function is assumed to be fallible, so `size_hint()` will return
+    /// `(0, Some(len))`.
+    #[must_use]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn new(map: F) -> MappedArgs<Ret, F> {
+        let (argc, argv) = direct::argc_argv();
+        MappedArgs {
+            cur: argv,
+            end: helpers::back(argv, argc),
+            map,
+            #[cfg(feature = "infallible_map")]
+            fallible: true
+        }
+    }
+
+    #[cfg(feature = "infallible_map")]
+    /// Returns an iterator that applies `map` to each argument (`*const u8`).
+    ///
+    /// The mapping function is assumed to be infallible, so `size_hint()` will return
+    /// `(len, Some(len))`.
+    ///
+    /// `map` should never return `None`, but in the case that it does, it will be skipped.
+    #[must_use]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn new_infallible(map: F) -> MappedArgs<Ret, F> {
+        let (argc, argv) = direct::argc_argv();
+        MappedArgs { cur: argv, end: helpers::back(argv, argc), map, fallible: false }
+    }
+
     /// Gets the remaining arguments in this iterator as a slice.
     #[must_use]
+    #[inline]
     pub fn as_slice(&self) -> &'static [CStr<'static>] {
         unsafe {
             switch!(core::slice::from_raw_parts(
@@ -69,7 +137,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> MappedArgs<Ret, F> {
     }
 }
 
-impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedArgs<Ret, F> {
+impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     type Item = Ret;
 
     // TODO: try rewriting these to be faster
@@ -173,7 +241,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> Iterator for MappedA
     }
 }
 
-impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
+impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator
     for MappedArgs<Ret, F>
 {
     // TODO: make sure these skip correctly
@@ -223,7 +291,7 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
 
 // removed as i realized neither of these fit the functionality of MappedArgs
 //
-// impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> ExactSizeIterator
+// impl<Ret, F: Fn(*const u8) -> Option<Ret>> ExactSizeIterator
 //     for MappedArgs<Ret, F>
 // {
 //     #[allow(clippy::inline_always)]
@@ -232,5 +300,5 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> DoubleEndedIterator
 //         len(self.cur, self.end)
 //     }
 // }
-// impl<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static> FusedIterator for MappedArgs<Ret, F>
+// impl<Ret, F: Fn(*const u8) -> Option<Ret>> FusedIterator for MappedArgs<Ret, F>
 // {}

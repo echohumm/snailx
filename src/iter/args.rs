@@ -1,14 +1,18 @@
 // TODO: optimize this in general
-#![allow(clippy::while_let_on_iterator, clippy::copy_iterator)]
+#![allow(clippy::while_let_on_iterator)]
 
-use crate::{CStr, MappedArgs, cmdline::helpers::try_to_str, iter::helpers::len};
+use {
+    crate::{CStr, MappedArgs, cmdline::helpers::try_to_str, iter::helpers::len},
+    cmdline::helpers,
+    direct
+};
 
 import! {
     use core::{
         iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
-        marker::Copy,
-        ops::Fn,
-        option::Option::{self, None, Some}
+        ops::{Fn},
+        option::Option::{self, None, Some},
+        default::Default
     }
 }
 
@@ -20,7 +24,35 @@ pub struct Args {
     pub(crate) end: *const *const u8
 }
 
+impl Default for Args {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Args {
+    /// Creates a new `Args` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #![cfg(feature = "std")]
+    /// # use snailx::Args;
+    ///
+    /// for arg in Args::new().map(|v| v.to_stdlib()) {
+    ///     println!("{}", arg.to_string_lossy());
+    /// }
+    /// ```
+    #[must_use]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    // cold because these are usually called once at startup
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn new() -> Args {
+        let (argc, argv) = direct::argc_argv();
+        Args { cur: argv, end: helpers::back(argv, argc) }
+    }
+
     /// Gets the remaining arguments in this iterator as a slice.
     #[must_use]
     pub fn as_slice(&self) -> &'static [CStr<'static>] {
@@ -32,10 +64,10 @@ impl Args {
         }
     }
 
-    /// Map this iterator to a different type. Like [`crate::map_args`], but operates on an existing
+    /// Map this iterator to a different type. Like [`MappedArgs::new`](crate::MappedArgs::new), but operates on an existing
     /// iterator.
     #[must_use]
-    pub fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
+    pub fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret>>(
         &self,
         map: F
     ) -> MappedArgs<Ret, F> {
@@ -50,17 +82,17 @@ impl Args {
     }
 
     #[cfg(feature = "infallible_map")]
-    /// Map this iterator to a different type. Like [`crate::map_args_infallible`], but
+    /// Map this iterator to a different type. Like [`MappedArgs::new_infallible`](crate::MappedArgs::new_infallible), but
     /// operates on an existing iterator.
     #[must_use]
-    pub fn map_ty_infallible<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
+    pub fn map_ty_infallible<Ret, F: Fn(*const u8) -> Option<Ret>>(
         &self,
         map: F
     ) -> MappedArgs<Ret, F> {
         MappedArgs { cur: self.cur, end: self.end, map, fallible: false }
     }
 
-    /// Map this iterator to `&'static str`. Like [`crate::args_utf8`], but operates on an existing
+    /// Map this iterator to `&'static str`. Like [`MappedArgs::utf8`](crate::MappedArgs::utf8), but operates on an existing
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
@@ -77,7 +109,7 @@ impl Args {
     }
 
     #[cfg(feature = "std")]
-    /// Map this iterator to `&'static OsStr`. Like [`crate::args_os`], but operates on an existing
+    /// Map this iterator to `&'static OsStr`. Like [`MappedArgs::osstr`](crate::MappedArgs::osstr), but operates on an existing
     /// iterator.
     #[must_use]
     pub fn map_os(

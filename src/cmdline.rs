@@ -1,100 +1,4 @@
-use crate::{
-    direct,
-    ffi::minimal_cstr::CStr,
-    iter::{args::Args, mapped_args::MappedArgs}
-};
-
-import! {
-    use core::{slice, ops::Fn, option::Option, marker::Copy}
-}
-
-/// Returns an iterator over the program's arguments as <code>[CStr](CStr)<'static></code>.
-///
-/// # Examples
-///
-/// ```rust
-/// # #![cfg(feature = "std")]
-/// # use snailx::args;
-///
-/// for arg in args().map(|v| v.to_stdlib()) {
-///     println!("{}", arg.to_string_lossy());
-/// }
-/// ```
-#[must_use]
-#[inline]
-// cold because these are usually called once at startup
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn args() -> Args {
-    let (argc, argv) = direct::argc_argv();
-    Args { cur: argv, end: helpers::back(argv, argc) }
-}
-
-/// Returns an iterator that applies `map` to each argument (`*const u8`). If `map` returns
-/// `None`, that argument is skipped.
-///
-/// The mapping function is assumed to be fallible, so `map_args().size_hint()` will return
-/// `(0, Some(len))`.
-#[must_use]
-#[inline]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn map_args<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
-    map: F
-) -> MappedArgs<Ret, F> {
-    let (argc, argv) = direct::argc_argv();
-    MappedArgs {
-        cur: argv,
-        end: helpers::back(argv, argc),
-        map,
-        #[cfg(feature = "infallible_map")]
-        fallible: true
-    }
-}
-
-#[cfg(feature = "infallible_map")]
-/// Returns an iterator that applies `map` to each argument (`*const u8`).
-///
-/// The mapping function is assumed to be infallible, so `map_args().size_hint()` will return
-/// `(len, Some(len))`.
-///
-/// `map` should never return `None`, but in the case that it does, it will be skipped.
-#[must_use]
-#[inline]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn map_args_infallible<Ret, F: Fn(*const u8) -> Option<Ret> + Copy + 'static>(
-    map: F
-) -> MappedArgs<Ret, F> {
-    let (argc, argv) = direct::argc_argv();
-    MappedArgs { cur: argv, end: helpers::back(argv, argc), map, fallible: false }
-}
-
-/// Returns an iterator over the program's arguments as `&'static str`. Non-UTF-8 arguments are
-/// skipped.
-#[must_use]
-#[allow(clippy::inline_always)]
-#[inline(always)]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn args_utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
-    map_args(helpers::try_to_str)
-}
-
-/// Returns an iterator over the program's arguments as `&'static std::ffi::OsStr`. Requires the
-/// `std` feature.
-#[cfg(feature = "std")]
-#[must_use]
-#[allow(clippy::inline_always)]
-#[inline(always)]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn args_os()
--> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>> {
-    #[cfg(not(feature = "infallible_map"))]
-    {
-        map_args(helpers::to_osstr)
-    }
-    #[cfg(feature = "infallible_map")]
-    {
-        map_args_infallible(helpers::to_osstr)
-    }
-}
+use crate::{direct, ffi::minimal_cstr::CStr};
 
 /// Returns a slice of <code>[CStr](CStr)<'static></code>.
 ///
@@ -114,7 +18,7 @@ pub fn args_slice() -> &'static [CStr<'static>] {
 
     // SAFETY: argv points to a valid slice of argc count pointers, CStr is repr(transparent) around
     // a pointer
-    unsafe { slice::from_raw_parts(argv.cast::<CStr<'static>>(), argc as usize) }
+    unsafe { switch!(core::slice::from_raw_parts(argv.cast::<CStr<'static>>(), argc as usize)) }
 }
 
 #[allow(clippy::redundant_pub_crate)]

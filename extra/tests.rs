@@ -147,7 +147,7 @@ fn _strlen_correct() {
 fn iter_count() {
     test_i! {
         a,
-        let args = snailx::args();
+        let args = snailx::Args::new();
 
         let mut cnt = 0;
         for _ in args {
@@ -162,7 +162,7 @@ fn iter_count() {
 fn len() {
     test_i! {
         a,
-        let args = snailx::args();
+        let args = snailx::Args::new();
 
         assert_eq!(args.len(), a.len());
     }
@@ -174,7 +174,7 @@ fn len() {
 fn cstrs_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::args().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| unsafe { CStr::from_ptr(s) }).collect::<Vec<_>>().as_slice());
+        assert_eq!(snailx::Args::new().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| unsafe { CStr::from_ptr(s) }).collect::<Vec<_>>().as_slice());
     }
 }
 
@@ -190,7 +190,7 @@ fn slice_correct() {
 fn os_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::args_os().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::to_osstr(s).unwrap()).collect::<Vec<_>>());
+        assert_eq!(snailx::MappedArgs::osstr().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::to_osstr(s).unwrap()).collect::<Vec<_>>());
     }
 }
 
@@ -208,7 +208,7 @@ fn slice() {
 fn cstr_iter() {
     test_i! {
         a,
-        let args = snailx::args();
+        let args = snailx::Args::new();
 
         for (i, arg) in args.enumerate() {
             assert_eq!(arg.to_stdlib(), unsafe { CStr::from_ptr(a[i]).to_stdlib() });
@@ -220,7 +220,7 @@ fn cstr_iter() {
 fn os_iter() {
     test_i! {
         a,
-        let args = snailx::args_os();
+        let args = snailx::MappedArgs::osstr();
 
         for (i, arg) in args.enumerate() {
             assert_eq!(arg, snailx::bench_helpers::to_osstr(a[i]).unwrap());
@@ -232,7 +232,7 @@ fn os_iter() {
 fn cstr_nth() {
     test_i! {
         a,
-        let mut args = snailx::args();
+        let mut args = snailx::Args::new();
 
         // consumes first 3 if they exist
         if !a.is_empty() {
@@ -253,7 +253,7 @@ fn cstr_nth() {
 fn os_nth() {
     test_i! {
         a,
-        let mut args = snailx::args_os();
+        let mut args = snailx::MappedArgs::osstr();
 
         if !a.is_empty() {
             assert_eq!(args.nth(0).unwrap(), snailx::bench_helpers::to_osstr(a[0]).unwrap());
@@ -272,7 +272,7 @@ fn os_nth() {
 fn cstr_size_hint_and_len() {
     test_i! {
         a,
-        let args = snailx::args();
+        let args = snailx::Args::new();
 
         assert_eq!(args.size_hint(), (a.len(), Some(a.len())));
         assert_eq!(args.len(), a.len());
@@ -283,7 +283,7 @@ fn cstr_size_hint_and_len() {
 fn utf8_size_hint() {
     test_i! {
         a,
-        let args = snailx::args_utf8();
+        let args = snailx::MappedArgs::utf8();
 
         assert_eq!(args.size_hint(), (0, Some(a.len())));
     }
@@ -293,7 +293,7 @@ fn utf8_size_hint() {
 fn os_size_hint_and_len() {
     test_i! {
         a,
-        let args = snailx::args_os();
+        let args = snailx::MappedArgs::osstr();
 
         #[cfg(not(feature = "infallible_map"))]
         assert_eq!(args.size_hint(), (0, Some(a.len())));
@@ -324,7 +324,7 @@ macro_rules! test_utf8 {
 fn utf8_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::args_utf8().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::try_to_str(s).unwrap()).collect::<Vec<_>>());
+        assert_eq!(snailx::MappedArgs::utf8().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::try_to_str(s).unwrap()).collect::<Vec<_>>());
     }
 }
 
@@ -332,7 +332,7 @@ fn utf8_correct() {
 fn utf8_iter() {
     test_i! {
         a,
-        let args = snailx::args_utf8();
+        let args = snailx::MappedArgs::utf8();
 
         for (i, arg) in args.enumerate() {
             assert_eq!(arg, snailx::bench_helpers::try_to_str(a[i]).unwrap());
@@ -344,7 +344,7 @@ fn utf8_iter() {
 fn utf8_nth() {
     test_i! {
         a,
-        let mut args = snailx::args_utf8();
+        let mut args = snailx::MappedArgs::utf8();
 
         if !a.is_empty() {
             assert_eq!(args.nth(0).unwrap(), snailx::bench_helpers::try_to_str(a[0]).unwrap());
@@ -379,7 +379,7 @@ fn try_to_str() {
 fn utf8_iter_no_invalid() {
     test_utf8! {
         v, a,
-        let mut args = snailx::args_utf8();
+        let mut args = snailx::MappedArgs::utf8();
 
         for i in 0..=a.len() {
             let arg = args.next();
@@ -398,7 +398,7 @@ fn utf8_iter_no_invalid() {
 fn utf8_nth_no_invalid() {
     test_utf8! {
         v, a,
-        let mut args = snailx::args_utf8();
+        let mut args = snailx::MappedArgs::utf8();
 
         let arg = args.nth(1);
 
@@ -415,7 +415,7 @@ fn utf8_nth_no_invalid() {
 fn utf8_skips_invalid() {
     let a = unsafe { set_args_utf8(2) };
 
-    let mut args = snailx::args_utf8();
+    let mut args = snailx::MappedArgs::utf8();
 
     assert_eq!(
         args.next(),

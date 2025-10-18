@@ -1,10 +1,10 @@
-#![allow(clippy::inline_always)]
 //! Direct, platform-specific access to `argc` and `argv`.
 //! Most users should prefer the higher-level iterators in the crate root.
 
 /// Returns `(argc, argv)`, where `argc` is the number of arguments and `argv` is a pointer to an
 /// array of pointers to null-terminated strings (the program arguments).
 #[must_use]
+#[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "__bench"), cold)]
 pub fn argc_argv() -> (u32, *const *const u8) {
@@ -22,6 +22,7 @@ pub fn argc_argv() -> (u32, *const *const u8) {
 ///
 /// The caller must ensure it is safe to modify `argc` and `argv`, and that no concurrent access is
 /// taking place.
+#[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "__bench"), cold)]
 #[allow(clippy::must_use_candidate)]
@@ -56,13 +57,15 @@ pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *
 ))]
 pub(crate) mod imp {
     extern crate core;
-    use crate::ffi::{c_int, c_uint};
+    use {
+        crate::ffi::{c_int, c_uint},
+    };
     import! {
-        use core::{
-            ptr,
-            sync::atomic::{AtomicU32, AtomicPtr, Ordering},
+            use core::{
+                ptr,
+                sync::atomic::{AtomicU32, AtomicPtr, Ordering},
+            }
         }
-    }
 
     static ARGC: AtomicU32 = AtomicU32::new(0);
     static ARGV: AtomicPtr<*const u8> = AtomicPtr::new(ptr::null_mut());
@@ -71,7 +74,11 @@ pub(crate) mod imp {
     #[used]
     #[unsafe(link_section = ".init_array.00098")]
     static INIT: extern "C" fn(c_int, *const *const u8, *const *const u8) = {
-        extern "C" fn init_wrapper(argc: c_int, argv: *const *const u8, _: *const *const u8) {
+        extern "C" fn init_wrapper(
+            argc: c_int,
+            argv: *const *const u8,
+            _: *const *const u8
+        ) {
             #[allow(clippy::cast_sign_loss)]
             ARGC.store(argc as c_uint, Ordering::Relaxed);
             ARGV.store(argv as *mut *const u8, Ordering::Relaxed);
@@ -79,6 +86,7 @@ pub(crate) mod imp {
         init_wrapper
     };
 
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[cfg_attr(not(feature = "__bench"), cold)]
     pub fn argc_argv() -> (u32, *const *const u8) {
@@ -105,6 +113,7 @@ pub(crate) mod imp {
         fn _NSGetArgv() -> *mut *mut *mut c_char;
     }
 
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[cfg_attr(not(feature = "__bench"), cold)]
     pub fn argc_argv() -> (u32, *const *const u8) {

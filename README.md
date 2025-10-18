@@ -4,6 +4,7 @@
 
 - MSRV: 1.48.0
     - Only benchmarked on latest stable and nightly.
+    - Tests require `-- --test-threads=1` on earlier rustc versions to run without race conditions.
 - Licenses: GPL-3.0, MIT
 
 ## Overview
@@ -26,13 +27,13 @@
 ### Example usage
 
 ```rust
-use snailx::args;
+use snailx::Args;
 
 fn main() {
     // Iterate over arguments, skipping the first one.
     // Because `snailx` uses its own, minimal and intermediary `CStr` type, it must be converted to a `std::ffi::CStr` 
     // before usage. This behavior is planned to be improved in the future.
-    let args = args().skip(1).filter_map(|arg| arg.to_stdlib().to_str().ok());
+    let args = Args::new().skip(1).filter_map(|arg| arg.to_stdlib().to_str().ok());
     match args.next() {
         Some("run") => println!("Running"),
         Some("build") => println!("Building"),
@@ -56,13 +57,13 @@ fn main() {
 
 ### Functions
 
-- `args() -> Args` - The basic iterator over the program arguments as `snailx::CStr<'static>`
-- `args_os() -> MappedArgs<&'static OsStr, fn(*const u8) -> Option<&'static std::ffi::OsStr>` - Iterator over the
-  program arguments as `&'static std::ffi::OsStr`
-- `args_str() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>` - Iterator over the program arguments
-  as `&'static str`
-- `map_args<T, F: Fn(*const u8) -> Option<T> + Copy + 'static>(map: F)` - Iterator over the program arguments as `T`
-- `arg_ptrs() -> &'static [*const u8]` - Slice of pointers to the program arguments. Returns a direct slice of argv
+- `Args::new() -> Args` - The basic iterator over the program arguments as `snailx::CStr<'static>`
+- `MappedArgs::osstr() -> MappedArgs<&'static OsStr, fn(*const u8) -> Option<&'static std::ffi::OsStr>` - Iterator over
+  the program arguments as `&'static std::ffi::OsStr`
+- `MappedArgs::utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>` - Iterator over the program
+  arguments as `&'static str`
+- `MappedArgs::new<T, F: Fn(*const u8) -> Option<T>>(map: F)` - Iterator over the program arguments as `T`
+- `direct::argc_argv() -> (u32, *const *const u8)` - Raw access to `(argc, argv)`
 - `args_slice() -> &'static [CStr<'static>]` - Slice of the program arguments. This function's safety is a primary
   reason for the existence of `snailx::CStr`
 
@@ -72,7 +73,7 @@ fn main() {
   `snailx::CStr::to_stdlib`
 - `no_cold` - Removes the `#[cold]` attribute from several functions
 - `to_core_cstr` (MSRV 1.64.0) - Enables `snailx::CStr::to_stdlib`
-- `assume_valid_str` - This massively speeds up the iterator returned by `args_str()` by disabling validity checks, but
+- `assume_valid_str` - This massively speeds up the iterator returned by `MappedArgs::utf8()` by disabling validity checks, but
   can cause UB if the program arguments are invalid UTF-8. Use disrecommended unless you can guarantee the returned
   `&'static str`s will be used safely or invalid UTF-8 will never be used.
 
@@ -113,10 +114,10 @@ fn main() {
 ### Basic argument iteration
 
 ```rust
-use snailx::args;
+use snailx::Args;
 
 fn main() {
-    for (i, arg) in args().enumerate() {
+    for (i, arg) in Args::new().enumerate() {
         println!("Argument {}: {:?}", i, arg);
     }
 }
@@ -125,10 +126,10 @@ fn main() {
 ### String arguments with error handling
 
 ```rust
-use snailx::args_str;
+use snailx::MappedArgs;
 
 fn main() {
-    for arg in args_str() {
+    for arg in MappedArgs::utf8() {
         match arg {
             "help" => println!("Usage: ..."),
             "version" => println!("Version 0.1.0"),
@@ -141,10 +142,12 @@ fn main() {
 ### Custom argument mapping
 
 ```rust
-use snailx::map_args;
+use snailx::MappedArgs;
 
 fn main() {
-    let lengths: Vec<usize> = map_args(|ptr| {
+  // alternatively, if `infallible_map` is enabled, you can use `MappedArgs::new_infallible()` if you want `size_hint` 
+  // to return an accurate lower bound.
+    let lengths: Vec<usize> = MappedArgs::new(|ptr| {
         unsafe {
             // simple strlen implementation
             let mut i = 0;
