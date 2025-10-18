@@ -7,7 +7,7 @@ authors = ["echohumm <echo0humm@gmail.com>"]
 edition = "2015"
 rust-version = "1.48.0"
 description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
-license = "GPL-3 OR MIT"
+license = "GPL-3.0 OR MIT"
 repository = "https://github.com/echohumm/snail"
 # TODO: better keywords/cats
 keywords = ["args", "argv", "cli", "zero-allocation", "no_std"]

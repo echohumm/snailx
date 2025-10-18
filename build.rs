@@ -1,3 +1,5 @@
+// TODO: use a proper out dir instead of directly modifying a source file
+
 use std::{
     env::{self, current_dir},
     ffi::OsString,
