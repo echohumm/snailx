@@ -115,7 +115,6 @@ pub use {
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod bench_helpers {
+    #[cfg(feature = "std")] pub use cmdline::helpers::to_osstr;
     pub use {cmdline::helpers::try_to_str, ffi::strlen, iter::helpers::len};
-    #[cfg(feature = "std")]
-    pub use cmdline::helpers::to_osstr;
 }

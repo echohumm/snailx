@@ -78,20 +78,18 @@ fn main() {
 
     let src_contents = read_to_string(direct_src).expect("failed to read source file");
 
-    let generated = src_contents
-        .as_str()
-        .replace(
-            "[Replace me with link section]",
-            if v.minor > 81 || v.major > 1 {
-                "#[unsafe(link_section = \".init_array.00098\")]"
-            } else {
-                "#[link_section = \".init_array.00098\"]"
-            }
-        );
-        // .replace(
-        //     "[Replace me with windows bufsize]",
-        //     &env::var("WIN_BUFSIZE").unwrap_or_else(|_| String::from("1024"))
-        // )
+    let generated = src_contents.as_str().replace(
+        "[Replace me with link section]",
+        if v.minor > 81 || v.major > 1 {
+            "#[unsafe(link_section = \".init_array.00098\")]"
+        } else {
+            "#[link_section = \".init_array.00098\"]"
+        }
+    );
+    // .replace(
+    //     "[Replace me with windows bufsize]",
+    //     &env::var("WIN_BUFSIZE").unwrap_or_else(|_| String::from("1024"))
+    // )
 
     let dst_path = raw_src.join("direct.rs");
 

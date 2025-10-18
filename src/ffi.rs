@@ -26,7 +26,7 @@ pub mod minimal_cstr {
         use core::{marker::PhantomData, cmp::PartialEq}
     }
     use super::strlen;
-    
+
     // TODO: make this a full-fledged CStr implementation so no need for to_stdlib
 
     /// A minimal CStr implementation for use in place of `core::ffi::CStr` (unstable before 1.64)
@@ -43,7 +43,7 @@ pub mod minimal_cstr {
         inner: *const c_char,
         _marker: PhantomData<&'a [c_char]>
     }
-    
+
     impl PartialEq<*const u8> for CStr<'_> {
         #[inline(always)]
         fn eq(&self, other: &*const u8) -> bool {
@@ -66,16 +66,16 @@ pub mod minimal_cstr {
         pub const fn as_ptr(&self) -> *const u8 {
             self.inner.cast()
         }
-        
+
         /// Gets the length of this `CStr`.
-        /// 
+        ///
         /// Avoid calling this function more than once.
         #[must_use]
         #[inline(always)]
         pub fn len(&self) -> usize {
             unsafe { strlen(self.inner) }
         }
-        
+
         #[cfg(all(feature = "std", not(feature = "to_core_cstr")))]
         /// Converts this value into the `std` equivalent.
         #[must_use]
@@ -84,7 +84,8 @@ pub mod minimal_cstr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
                 assume!(!self.inner.is_null());
-                let bytes = switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
+                let bytes =
+                    switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
@@ -102,7 +103,8 @@ pub mod minimal_cstr {
             // SAFETY: from_ptr requires that the pointer is a valid CStr
             unsafe {
                 assume!(!self.inner.is_null());
-                let bytes = switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
+                let bytes =
+                    switch!(core::slice::from_raw_parts(self.inner, strlen(self.inner.cast()) + 1));
                 assume!(
                     !bytes.is_empty() && bytes[bytes.len() - 1] == 0,
                     "CStr does not end with null byte"
