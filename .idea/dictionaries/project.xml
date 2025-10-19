@@ -2,7 +2,9 @@
   <dictionary name="project">
     <words>
       <w>Affero</w>
+      <w>cstrs</w>
       <w>maybedo</w>
+      <w>modfun</w>
       <w>multiflag</w>
       <w>nuttx</w>
       <w>osstring</w>
