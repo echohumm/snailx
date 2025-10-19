@@ -347,10 +347,12 @@ fn bench_snailx_helpers(c: &mut Criterion) {
                 (p, unsafe { p.add(1023) })
             },
             |(start, end)| {
-                black_box(snailx::bench_helpers::len(
-                    black_box(*black_box(start)),
-                    black_box(*black_box(end))
-                ))
+                black_box(unsafe {
+                    snailx::bench_helpers::len(
+                        black_box(*black_box(start)),
+                        black_box(*black_box(end))
+                    )
+                })
             },
             BatchSize::SmallInput
         );

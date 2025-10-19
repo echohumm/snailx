@@ -64,13 +64,10 @@ impl Args {
         }
     }
 
-    /// Map this iterator to a different type. Like [`MappedArgs::new`](crate::MappedArgs::new), but operates on an existing
-    /// iterator.
+    /// Map this iterator to a different type. Like [`MappedArgs::new`](crate::MappedArgs::new), but
+    /// operates on an existing iterator.
     #[must_use]
-    pub fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret>>(
-        &self,
-        map: F
-    ) -> MappedArgs<Ret, F> {
+    pub fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret>>(&self, map: F) -> MappedArgs<Ret, F> {
         MappedArgs {
             cur: self.cur,
             end: self.end,
@@ -82,8 +79,9 @@ impl Args {
     }
 
     #[cfg(feature = "infallible_map")]
-    /// Map this iterator to a different type. Like [`MappedArgs::new_infallible`](crate::MappedArgs::new_infallible), but
-    /// operates on an existing iterator.
+    /// Map this iterator to a different type. Like
+    /// [`MappedArgs::new_infallible`](crate::MappedArgs::new_infallible), but operates on an
+    /// existing iterator.
     #[must_use]
     pub fn map_ty_infallible<Ret, F: Fn(*const u8) -> Option<Ret>>(
         &self,
@@ -92,8 +90,8 @@ impl Args {
         MappedArgs { cur: self.cur, end: self.end, map, fallible: false }
     }
 
-    /// Map this iterator to `&'static str`. Like [`MappedArgs::utf8`](crate::MappedArgs::utf8), but operates on an existing
-    /// iterator. Non-UTF-8 arguments are skipped.
+    /// Map this iterator to `&'static str`. Like [`MappedArgs::utf8`](crate::MappedArgs::utf8), but
+    /// operates on an existing iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
         MappedArgs {
@@ -109,8 +107,8 @@ impl Args {
     }
 
     #[cfg(feature = "std")]
-    /// Map this iterator to `&'static OsStr`. Like [`MappedArgs::osstr`](crate::MappedArgs::osstr), but operates on an existing
-    /// iterator.
+    /// Map this iterator to `&'static OsStr`. Like [`MappedArgs::osstr`](crate::MappedArgs::osstr),
+    /// but operates on an existing iterator.
     #[must_use]
     pub fn map_os(
         &self
@@ -119,7 +117,7 @@ impl Args {
         MappedArgs {
             cur: self.cur,
             end: self.end,
-            map: crate::cmdline::helpers::to_osstr,
+            map: helpers::to_osstr,
             #[cfg(feature = "infallible_map")]
             fallible: false
         }
@@ -137,11 +135,12 @@ impl Iterator for Args {
         if self.cur == self.end {
             return None;
         }
-        assume!(self.cur < self.end);
 
         // SAFETY: we just checked that `self.cur < self.end`
         let p = self.cur;
         self.cur = unsafe { self.cur.add(1) };
+
+        assume!(p < self.end);
 
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(p.read()) })
@@ -150,7 +149,7 @@ impl Iterator for Args {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = len(self.cur, self.end);
+        let len = unsafe { len(self.cur, self.end) };
         (len, Some(len))
     }
 
@@ -166,6 +165,7 @@ impl Iterator for Args {
         self.cur = unsafe { p.add(1) };
 
         assume!(!self.cur.is_null());
+        assume!(!p.is_null() && p < self.end);
 
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(p.read()) })
@@ -181,6 +181,8 @@ impl DoubleEndedIterator for Args {
 
         // SAFETY: we just checked that `self.cur < self.end`
         self.end = unsafe { self.end.sub(1) };
+        assume!(self.end > self.cur);
+        
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(self.end.read()) })
     }
@@ -194,8 +196,7 @@ impl DoubleEndedIterator for Args {
 
         // SAFETY: we just checked that `self.end - n` is in bounds
         self.end = unsafe { self.end.sub(n + 1) };
-
-        assume!(!self.end.is_null());
+        assume!(!self.end.is_null() && self.end > self.cur);
 
         // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
         Some(unsafe { CStr::from_ptr(self.end.read()) })
@@ -206,7 +207,7 @@ impl ExactSizeIterator for Args {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn len(&self) -> usize {
-        len(self.cur, self.end)
+        unsafe { len(self.cur, self.end) }
     }
 }
 impl FusedIterator for Args {}

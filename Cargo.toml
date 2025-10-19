@@ -62,15 +62,16 @@ infallible_map = []
 
 # commented out until usage because it's a higher msrv than the crate
 
-#[[bench]]
-## TODO: split into multiple benchmarks/files
-#name = "bench_gen"
-#path = "extra/bench.rs"
-#harness = false
-#required-features = ["__bench"]
-#
-#[dev-dependencies]
-#criterion = "0.7.0"
+# TODO: split below targets into multiple files
+
+[[bench]]
+name = "bench_gen"
+path = "extra/bench.rs"
+harness = false
+required-features = ["__bench"]
+
+[dev-dependencies]
+criterion = "0.7.0"
 
 [[test]]
 name = "tests_gen"

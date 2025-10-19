@@ -6,9 +6,10 @@
 //!   - if the `assume_valid_str` feature is enabled, all arguments are assumed to be valid UTF-8
 //!   - if the `assume_valid_str` feature is disabled, invalid UTF-8 arguments are skipped
 //! - [`direct::argc_argv`](crate::direct::argc_argv) returns the raw `(argc, argv)`
-//! - [`MappedArgs::new`](crate::MappedArgs::new) lets you map each `*const u8` argument pointer into a custom type; `None` values
-//!   are skipped
-//! - [`MappedArgs::osstr`](crate::MappedArgs::osstr) (with the `std` feature) yields `&'static std::ffi::OsStr`
+//! - [`MappedArgs::new`](crate::MappedArgs::new) lets you map each `*const u8` argument pointer
+//!   into a custom type; `None` values are skipped
+//! - [`MappedArgs::osstr`](crate::MappedArgs::osstr) (with the `std` feature) yields `&'static
+//!   std::ffi::OsStr`
 //!
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
@@ -116,6 +117,5 @@ pub use {
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod bench_helpers {
-    #[cfg(feature = "std")] pub use cmdline::helpers::to_osstr;
-    pub use {cmdline::helpers::try_to_str, ffi::strlen, iter::helpers::len};
+    pub use {cmdline::helpers::*, ffi::strlen, iter::helpers::len};
 }

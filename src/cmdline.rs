@@ -1,4 +1,4 @@
-use crate::{direct, ffi::minimal_cstr::CStr};
+use crate::ffi::minimal_cstr::CStr;
 
 /// Returns a slice of <code>[CStr](CStr)<'static></code>.
 ///
@@ -9,7 +9,7 @@ use crate::{direct, ffi::minimal_cstr::CStr};
 #[inline]
 #[cfg_attr(not(feature = "no_cold"), cold)]
 pub fn args_slice() -> &'static [CStr<'static>] {
-    let (argc, argv) = direct::argc_argv();
+    let (argc, argv) = crate::direct::argc_argv();
     assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
 
     if argc == 0 {
@@ -81,7 +81,7 @@ pub(crate) mod helpers {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
-    pub fn back(argv: *const *const u8, argc: u32) -> *const *const u8 {
+    pub(crate) fn back(argv: *const *const u8, argc: u32) -> *const *const u8 {
         assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
         // SAFETY: argv points to a valid slice of argc count pointers, this is one past the last
         // but always decremented before deref

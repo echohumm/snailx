@@ -73,7 +73,8 @@ fn main() {
     let direct_src = raw_src.join("direct.rs.src");
 
     // Let Cargo know when to rerun the build script for the Rust source generation
-    println!("cargo:rerun-if-changed={}", raw_src.display());
+    println!("cargo:rerun-if-changed={}", direct_src.display());
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=RUSTC");
     println!("cargo:rerun-if-env-changed=RUSTC_WRAPPER");
     // println!("cargo:rerun-if-env-changed=WIN_BUFSIZE");
@@ -81,7 +82,7 @@ fn main() {
     let src_contents = read_to_string(direct_src).expect("failed to read source file");
 
     let generated = src_contents.as_str().replace(
-        "[Replace me with link section]",
+        "//[Replace me with link section]",
         if v.minor > 81 || v.major > 1 {
             "#[unsafe(link_section = \".init_array.00098\")]"
         } else {

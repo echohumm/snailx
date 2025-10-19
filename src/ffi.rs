@@ -21,11 +21,10 @@ extern "C" {
 pub mod minimal_cstr {
     extern crate core;
 
-    use super::c_char;
+    use super::{c_char, strlen};
     import! {
         use core::{marker::PhantomData, cmp::PartialEq}
     }
-    use super::strlen;
 
     // TODO: make this a full-fledged CStr implementation so no need for to_stdlib
 
