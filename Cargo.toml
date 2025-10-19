@@ -9,9 +9,8 @@ rust-version = "1.48.0"
 description = "Zero-allocation, low-overhead access to program arguments (argv) with iterators over `&'static CStr`, `&'static str`, and `&'static OsStr`. Works in no_std (optional std feature) and targets Unix and macOS."
 license = "GPL-3.0 OR MIT"
 repository = "https://github.com/echohumm/snail"
-# TODO: better keywords/cats
-keywords = ["args", "argv", "cli", "zero-allocation", "no_std"]
-categories = ["command-line-interface", "no-std::no-alloc"]
+keywords = ["argv", "arguments", "cli", "no_std", "zero-allocation"]
+categories = ["command-line-interface", "no-std::no-alloc", "os::unix-apis"]
 readme = "README.md"
 build = "build.rs"
 exclude = ["/src/main.rs", "/extra/"]
@@ -60,18 +59,18 @@ to_core_cstr = []
 ## enables infallible maps in MappedArgs with a boolean flag
 infallible_map = []
 
-# commented out until usage because it's a higher msrv than the crate
-
 # TODO: split below targets into multiple files
 
-[[bench]]
-name = "bench_gen"
-path = "extra/bench.rs"
-harness = false
-required-features = ["__bench"]
+# commented out until usage because it's a higher msrv than the crate
 
-[dev-dependencies]
-criterion = "0.7.0"
+#[[bench]]
+#name = "bench_gen"
+#path = "extra/bench.rs"
+#harness = false
+#required-features = ["__bench"]
+#
+#[dev-dependencies]
+#criterion = "0.7.0"
 
 [[test]]
 name = "tests_gen"

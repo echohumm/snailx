@@ -2,6 +2,8 @@
 #![allow(clippy::iter_nth_zero)]
 extern crate snailx;
 
+// TODO: format to shorten all long lines (cargo fmt ignores macro input)
+
 use snailx::{CStr, bench_helpers::strlen};
 
 const ARG_SET_0: [*const u8; 0] = [];
@@ -436,4 +438,218 @@ fn utf8_skips_invalid() {
         })
     );
     assert!(args.next().is_none());
+}
+
+// reversed iteration tests
+
+#[test]
+fn iter_count_back() {
+    test_i! {
+        a,
+        let mut args = snailx::Args::new();
+
+        let mut cnt = 0;
+        while args.next_back().is_some() {
+            cnt += 1;
+        }
+        assert_eq!(cnt, a.len());
+    }
+}
+
+#[test]
+fn cstr_iter_back() {
+    test_i! {
+        a,
+        let mut args = snailx::Args::new();
+
+        for i in (0..a.len()).rev() {
+            let arg = args.next_back().unwrap();
+            assert_eq!(arg.to_stdlib(), unsafe { CStr::from_ptr(a[i]).to_stdlib() });
+        }
+    }
+}
+
+#[test]
+fn os_iter_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::osstr();
+
+        for i in (0..a.len()).rev() {
+            let arg = args.next_back().unwrap();
+            assert_eq!(arg, snailx::bench_helpers::to_osstr(a[i]).unwrap());
+        }
+    }
+}
+
+#[test]
+fn cstr_nth_back() {
+    test_i! {
+        a,
+        let mut args = snailx::Args::new();
+
+        if !a.is_empty() {
+            assert_eq!(
+                args.nth_back(0).unwrap().to_stdlib(),
+                unsafe { CStr::from_ptr(a[a.len() - 1]).to_stdlib() }
+            );
+        }
+        if a.len() > 2 {
+            assert_eq!(
+                args.nth_back(1).unwrap().to_stdlib(),
+                unsafe { CStr::from_ptr(a[a.len() - 3]).to_stdlib() }
+            );
+        }
+
+        if a.len() > 3 {
+            assert!(args.nth_back(a.len().saturating_sub(3)).is_none());
+        }
+    }
+}
+
+#[test]
+fn os_nth_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::osstr();
+
+        if !a.is_empty() {
+            assert_eq!(
+                args.nth_back(0).unwrap(),
+                snailx::bench_helpers::to_osstr(a[a.len() - 1]).unwrap()
+            );
+        }
+        if a.len() > 2 {
+            assert_eq!(
+                args.nth_back(1).unwrap(),
+                snailx::bench_helpers::to_osstr(a[a.len() - 3]).unwrap()
+            );
+        }
+
+        if a.len() > 3 {
+            assert!(args.nth_back(a.len().saturating_sub(3)).is_none());
+        }
+    }
+}
+
+#[test]
+fn utf8_iter_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::utf8();
+
+        for i in (0..a.len()).rev() {
+            let arg = args.next_back().unwrap();
+            assert_eq!(arg, snailx::bench_helpers::try_to_str(a[i]).unwrap());
+        }
+    }
+}
+
+#[test]
+fn utf8_nth_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::utf8();
+
+        if !a.is_empty() {
+            assert_eq!(
+                args.nth_back(0).unwrap(),
+                snailx::bench_helpers::try_to_str(a[a.len() - 1]).unwrap()
+            );
+        }
+        if a.len() > 2 {
+            assert_eq!(
+                args.nth_back(1).unwrap(),
+                snailx::bench_helpers::try_to_str(a[a.len() - 3]).unwrap()
+            );
+        }
+
+        if a.len() > 3 {
+            assert!(args.nth_back(a.len().saturating_sub(3)).is_none());
+        }
+    }
+}
+
+// utf-8 reversed tests for invalid/mixed data
+
+#[cfg(not(feature = "assume_valid_str"))]
+#[test]
+fn utf8_iter_no_invalid_back() {
+    test_utf8! {
+        v, a,
+        let mut args = snailx::MappedArgs::utf8();
+
+        for i in (0..=a.len()).rev() {
+            let arg = args.next_back();
+
+            if v && i > 0 {
+                let idx = i - 1;
+                assert_eq!(
+                    arg,
+                    Some(unsafe {
+                        snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                            a[idx],
+                            strlen(a[idx])
+                        )))
+                    })
+                );
+            } else {
+                assert!(arg.is_none());
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "assume_valid_str"))]
+#[test]
+fn utf8_nth_no_invalid_back() {
+    test_utf8! {
+        v, a,
+        let mut args = snailx::MappedArgs::utf8();
+
+        let arg = args.nth_back(1);
+
+        if v {
+            let idx = a.len() - 2;
+            assert_eq!(
+                arg,
+                Some(unsafe {
+                    snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                        a[idx],
+                        strlen(a[idx])
+                    )))
+                })
+            );
+        } else {
+            assert!(arg.is_none());
+        }
+    }
+}
+
+#[cfg(not(feature = "assume_valid_str"))]
+#[test]
+fn utf8_skips_invalid_back() {
+    let a = unsafe { set_args_utf8(2) };
+
+    let mut args = snailx::MappedArgs::utf8();
+
+    assert_eq!(
+        args.next_back(),
+        Some(unsafe {
+            snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                a[2],
+                strlen(a[2])
+            )))
+        })
+    );
+    assert_eq!(
+        args.next_back(),
+        Some(unsafe {
+            snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                a[0],
+                strlen(a[0])
+            )))
+        })
+    );
+    assert!(args.next_back().is_none());
 }

@@ -94,6 +94,90 @@ fn bench_snailx_nth_minimal(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
+    unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
+
+    let mut group = c.benchmark_group("snailx/minimal/iterate_back");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                while let Some(s) = black_box(args).next_back() {
+                    black_box(s);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_nth_back_minimal(c: &mut Criterion) {
+    unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
+
+    let mut group = c.benchmark_group("snailx/minimal/nth_back");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
 #[cfg(feature = "std")]
 fn bench_iter_snailx_vs_std(c: &mut Criterion) {
     let mut group = c.benchmark_group("args/iterate/snailx_vs_std");
@@ -153,6 +237,131 @@ fn bench_iter_snailx_vs_std(c: &mut Criterion) {
                 for arg in black_box(args_s) {
                     black_box(arg);
                 }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "std")]
+fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
+    let mut group = c.benchmark_group("args/iterate_back/snailx_vs_std");
+    group.bench_function("snailx_cstr_back", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("snailx_osstr_back", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("snailx_str_back", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                while let Some(s) = black_box(args).next_back() {
+                    black_box(s);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_osstring_back", |b| {
+        b.iter_batched_ref(
+            std::env::args_os,
+            |args_os| {
+                while let Some(arg) = black_box(args_os).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_string_back", |b| {
+        b.iter_batched_ref(
+            std::env::args,
+            |args_s| {
+                while let Some(arg) = black_box(args_s).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "std")]
+fn bench_nth_back_snailx_vs_std(c: &mut Criterion) {
+    let mut group = c.benchmark_group("args/nth_back/snailx_vs_std");
+
+    group.bench_function("snailx_cstr_back", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("snailx_osstr_back", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("snailx_str_back", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_osstring_back", |b| {
+        b.iter_batched_ref(
+            std::env::args_os,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_string_back", |b| {
+        b.iter_batched_ref(
+            std::env::args,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(0)));
             },
             BatchSize::SmallInput
         );
@@ -328,6 +537,100 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_snailx_iter_back_preset(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(
+            ARGV_PRESET_CMDLINE.len() as u32,
+            ARGV_PRESET_CMDLINE.as_ptr()
+        )
+    };
+
+    let mut group = c.benchmark_group("snailx/preset/iterate_back");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                while let Some(arg) = black_box(args).next_back() {
+                    black_box(arg);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                while let Some(s) = black_box(args).next_back() {
+                    black_box(s);
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_nth_back_preset(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(
+            ARGV_PRESET_CMDLINE.len() as u32,
+            ARGV_PRESET_CMDLINE.as_ptr()
+        )
+    };
+
+    let mut group = c.benchmark_group("snailx/preset/nth_back");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(5)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(5)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).nth_back(black_box(5)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
 fn bench_snailx_helpers(c: &mut Criterion) {
     let mut group = c.benchmark_group("snailx/helpers");
 
@@ -376,16 +679,22 @@ fn bench_snailx_helpers(c: &mut Criterion) {
 
 pub fn bench(c: &mut Criterion) {
     bench_snailx_iter_minimal(c);
+    bench_snailx_iter_back_minimal(c);
     bench_snailx_nth_minimal(c);
+    bench_snailx_nth_back_minimal(c);
 
     #[cfg(feature = "std")]
     {
         bench_iter_snailx_vs_std(c);
+        bench_iter_back_snailx_vs_std(c);
         bench_nth_snailx_vs_std(c);
+        bench_nth_back_snailx_vs_std(c);
     }
 
     bench_snailx_iter_preset(c);
+    bench_snailx_iter_back_preset(c);
     bench_snailx_nth_preset(c);
+    bench_snailx_nth_back_preset(c);
 
     bench_snailx_helpers(c);
 }

@@ -1,8 +1,17 @@
 //! Direct, platform-specific access to `argc` and `argv`.
 //! Most users should prefer the higher-level iterators in the crate root.
 
+// noinspection DuplicatedCode
 /// Returns `(argc, argv)`, where `argc` is the number of arguments and `argv` is a pointer to an
 /// array of pointers to null-terminated strings (the program arguments).
+///
+/// # Examples
+///
+/// ```
+/// let (argc, argv) = snailx::direct::argc_argv();
+/// assert!(argc >= 0);
+/// assert!(!argv.is_null() || argc == 0);
+/// ```
 #[must_use]
 #[allow(clippy::inline_always)]
 #[inline(always)]
@@ -11,6 +20,7 @@ pub fn argc_argv() -> (u32, *const *const u8) {
     imp::argc_argv()
 }
 
+// noinspection DuplicatedCode
 /// Sets the value of `argc` and `argv`.
 ///
 /// Note that this does not actually modify the values of `argc` and `argv`, only the atomic used by
@@ -22,6 +32,17 @@ pub fn argc_argv() -> (u32, *const *const u8) {
 ///
 /// The caller must ensure it is safe to modify `argc` and `argv`, and that no concurrent access is
 /// taking place.
+///
+/// # Examples
+///
+/// ```
+/// // SAFETY: This is only a demonstration; only call if you are certain it's safe.
+/// unsafe {
+///     let old = snailx::direct::set_argc_argv(0, core::ptr::null());
+///     // Restore previous values:
+///     let _ = snailx::direct::set_argc_argv(old.0, old.1);
+/// }
+/// ```
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[cfg_attr(not(feature = "__bench"), cold)]
@@ -30,6 +51,7 @@ pub unsafe fn set_argc_argv(argc: u32, argv: *const *const u8) -> (u32, *const *
     imp::set_argc_argv(argc, argv)
 }
 
+// noinspection DuplicatedCode
 #[allow(unknown_lints, unexpected_cfgs)]
 #[cfg(any(
     target_os = "linux",
@@ -59,7 +81,7 @@ pub(crate) mod imp {
     extern crate core;
     use crate::ffi::{c_int, c_uint};
     import! {
-        use core::{
+        {
             ptr,
             sync::atomic::{AtomicU32, AtomicPtr, Ordering},
         }
@@ -98,6 +120,7 @@ pub(crate) mod imp {
     }
 }
 
+// noinspection DuplicatedCode
 #[cfg(target_vendor = "apple")]
 pub(crate) mod imp {
     use crate::ffi::{c_int, c_uint};
@@ -127,6 +150,7 @@ pub(crate) mod imp {
     }
 }
 
+// noinspection DuplicatedCode
 #[cfg(windows)]
 pub(crate) mod imp {
     #[inline(always)]

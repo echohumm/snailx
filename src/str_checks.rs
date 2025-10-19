@@ -1,7 +1,7 @@
 extern crate core;
 
 import! {
-    use core::mem::size_of
+    mem::size_of
 }
 
 #[inline(always)]

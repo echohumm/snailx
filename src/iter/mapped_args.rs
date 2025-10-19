@@ -1,17 +1,15 @@
 #![allow(clippy::while_let_on_iterator, unused_qualifications)]
 
-// TODO: deduplicate more like i did fold
-// TODO: try_fold and _rfold?
-
-use {super::helpers::len, CStr, cmdline::helpers, direct};
-
 import! {
-    use core::{
+    {
         iter::{DoubleEndedIterator, Iterator},
         ops::{Fn, FnMut},
         option::Option::{self, None, Some}
     }
 }
+use {super::helpers::len, CStr, cmdline::helpers, direct};
+
+// TODO: count() impl
 
 // /// This enum is used to determine what to do when an argument fails to parse.
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -145,12 +143,13 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
 
     // TODO: try rewriting these to be faster
 
-    #[inline]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
     fn next(&mut self) -> Option<Ret> {
         let mut ret = None;
 
         while self.cur != self.end {
-            // SAFETY: we just checked that `self.cur < self.end`
+            // SAFETY: we just checked that `self.cur + n` is in bounds
             let p = self.cur;
             self.cur = unsafe { self.cur.add(1) };
             assume!(!p.is_null() && p < self.end);
@@ -198,25 +197,10 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
             return None;
         }
 
-        let mut ret = None;
-
         self.cur = unsafe { self.cur.add(n) };
-        assume!(self.cur < self.end);
+        assume!(!self.cur.is_null() && self.cur < self.end);
 
-        while self.cur != self.end {
-            // SAFETY: we just checked that `self.cur + n` is in bounds
-            let p = self.cur;
-            self.cur = unsafe { self.cur.add(1) };
-            assume!(!p.is_null() && p < self.end);
-
-            // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-            if let Some(v) = (self.map)(unsafe { p.read() }) {
-                ret = Some(v);
-                break;
-            }
-        }
-
-        ret
+        self.next()
     }
 
     #[inline]
@@ -226,7 +210,6 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Ret, F> {
-    // TODO: make sure these skip correctly
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
         let mut ret = None;
@@ -253,23 +236,10 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
             return None;
         }
 
-        let mut ret = None;
-
         self.end = unsafe { self.end.sub(n) };
+        assume!(!self.end.is_null() && self.end > self.cur);
 
-        while self.cur != self.end {
-            // SAFETY: we just checked that `self.cur < self.end`
-            self.end = unsafe { self.end.sub(1) };
-
-            assume!(!self.end.is_null() && self.end > self.cur);
-
-            if let Some(v) = (self.map)(unsafe { self.end.read() }) {
-                ret = Some(v);
-                break;
-            }
-        }
-
-        ret
+        self.next_back()
     }
 
     #[inline]
@@ -280,7 +250,10 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
 
 mod map_helpers {
     import! {
-        use core::{ops::{Fn, FnMut}, option::Option::{self, Some}}
+        {
+            ops::{Fn, FnMut},
+            option::Option::{self, Some}
+        }
     }
     use crate::{MappedArgs, iter::helpers::len};
 

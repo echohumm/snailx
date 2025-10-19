@@ -4,7 +4,11 @@
 
 - MSRV: 1.48.0
     - Only benchmarked on latest stable and nightly.
-    - Tests require `-- --test-threads=1` on earlier rustc versions to run without race conditions.
+    - Tests require `-- --test-threads=1` on earlier rustc versions to run without race conditions causing spurious
+      failures.
+        - These are spurious as it is a documented safety condition of `snailx::direct::set_argc_argv()` that there is
+          no
+          concurrent access.
 - Licenses: GPL-3.0, MIT
 
 ## Overview
@@ -52,6 +56,9 @@ fn main() {
     - str
 - `no_std` support <small>technically</small>
 - Better performance <small>(WIP)</small>
+    - You can, under most circumstances, expect `snailx` iterators to be at least twice as fast as `std::env::args()`,
+      but you should benchmark yourself. In certain cases, `snailx` is up to 6x faster than stdlib, but much slower in
+      others.
 
 ## API
 
@@ -73,9 +80,9 @@ fn main() {
   `snailx::CStr::to_stdlib`
 - `no_cold` - Removes the `#[cold]` attribute from several functions
 - `to_core_cstr` (MSRV 1.64.0) - Enables `snailx::CStr::to_stdlib`
-- `assume_valid_str` - This massively speeds up the iterator returned by `MappedArgs::utf8()` by disabling validity checks, but
-  can cause UB if the program arguments are invalid UTF-8. Use disrecommended unless you can guarantee the returned
-  `&'static str`s will be used safely or invalid UTF-8 will never be used.
+- `assume_valid_str` - This massively speeds up the iterator returned by `MappedArgs::utf8()` by disabling validity
+  checks, but can cause UB if the program arguments are invalid UTF-8. Use disrecommended unless you can guarantee the 
+  returned `&'static str`s will be used safely or invalid UTF-8 will never be used.
 
 ### Types
 
@@ -145,8 +152,8 @@ fn main() {
 use snailx::MappedArgs;
 
 fn main() {
-  // alternatively, if `infallible_map` is enabled, you can use `MappedArgs::new_infallible()` if you want `size_hint` 
-  // to return an accurate lower bound.
+    // alternatively, if `infallible_map` is enabled, you can use `MappedArgs::new_infallible()` if you want `size_hint` 
+    // to return an accurate lower bound.
     let lengths: Vec<usize> = MappedArgs::new(|ptr| {
         unsafe {
             // simple strlen implementation

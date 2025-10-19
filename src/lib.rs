@@ -1,29 +1,27 @@
 //! `snailx` provides a simple, zero-allocation interface for iterating over program arguments.
 //!
 //! This crate exposes lightweight, zero-copy iterators over program arguments:
-//! - [`Args::new`](crate::Args::new) yields <code>[CStr]<'static></code>
-//! - [`MappedArgs::utf8`](crate::MappedArgs::utf8) yields `&'static str`
+//! - [`Args::new`](Args::new) yields <code>[CStr]<'static></code>
+//! - [`MappedArgs::utf8`] yields `&'static str`
 //!   - if the `assume_valid_str` feature is enabled, all arguments are assumed to be valid UTF-8
 //!   - if the `assume_valid_str` feature is disabled, invalid UTF-8 arguments are skipped
-//! - [`direct::argc_argv`](crate::direct::argc_argv) returns the raw `(argc, argv)`
-//! - [`MappedArgs::new`](crate::MappedArgs::new) lets you map each `*const u8` argument pointer
-//!   into a custom type; `None` values are skipped
-//! - [`MappedArgs::osstr`](crate::MappedArgs::osstr) (with the `std` feature) yields `&'static
-//!   std::ffi::OsStr`
+//! - [`direct::argc_argv`] returns the raw `(argc, argv)`
+//! - [`MappedArgs::new`] lets you map each `*const u8` argument pointer into a custom type; `None`
+//!   values are skipped
+//! - [`MappedArgs::osstr`] (with the `std` feature) yields `&'static std::ffi::OsStr`
 //!
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
+
+// TODO: make sure every iterator method we impl has tests + benches (fold, count, last)
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![no_implicit_prelude]
 #![deny(missing_docs)]
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
-// TODO: use super:: where applicable, examples for all public api
-// TODO: clean up imports and stuff using import! macro (cargo fmt doesn't)
-
 macro_rules! import {
-    (use core::$($v:tt)*) => {
+    ($($v:tt)*) => {
         #[cfg(feature = "std")]
         use std::$($v)*;
         #[cfg(not(feature = "std"))]
@@ -69,7 +67,7 @@ macro_rules! assume {
             }
         }
     };
-    // potentially-reachable branch with default message
+    // potentially reachable branch with default message
     (re, $e:expr) => {
         assume!($e, "entered unreachable code");
     };

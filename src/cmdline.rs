@@ -5,6 +5,15 @@ use crate::ffi::minimal_cstr::CStr;
 /// The slice references the OS-provided storage and should usually not be mutated.
 ///
 /// This is a simpler way to iterate over the elements, if preferred.
+///
+/// # Examples
+///
+/// ```
+/// use snailx::args_slice;
+/// let args = args_slice();
+/// // You can inspect or iterate over the CStrs:
+/// let _len = args.len();
+/// ```
 #[must_use]
 #[inline]
 #[cfg_attr(not(feature = "no_cold"), cold)]
@@ -23,11 +32,14 @@ pub fn args_slice() -> &'static [CStr<'static>] {
 
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) mod helpers {
-    use crate::ffi::strlen;
-
     import! {
-        use core::{mem::transmute, slice, option::Option::{self, Some}}
+        {
+            mem::transmute,
+            option::Option::{self, Some},
+            slice
+        }
     }
+    use crate::ffi::strlen;
 
     #[inline]
     #[allow(
@@ -67,7 +79,12 @@ pub(crate) mod helpers {
 
     #[cfg(feature = "std")]
     #[inline]
-    #[allow(clippy::unnecessary_wraps, missing_docs)]
+    #[allow(
+        clippy::unnecessary_wraps,
+        clippy::must_use_candidate,
+        missing_docs,
+        unused_qualifications
+    )]
     pub fn to_osstr(p: *const u8) -> Option<&'static ::std::ffi::OsStr> {
         // SAFETY: only called internally with valid CStr pointers from argv
         unsafe {

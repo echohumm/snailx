@@ -14,7 +14,7 @@ pub type c_int = i32;
 pub type c_uint = u32;
 
 extern "C" {
-    /// Gets the length of a C-style string by finding the first 0 byte after the given pointer.
+    /// Gets the length of a C-style string by finding the first nul byte after the given pointer.
     pub fn strlen(s: *const c_char) -> size_t;
 }
 
@@ -23,7 +23,7 @@ pub mod minimal_cstr {
 
     use super::{c_char, strlen};
     import! {
-        use core::{marker::PhantomData, cmp::PartialEq}
+        {cmp::PartialEq, marker::PhantomData}
     }
 
     // TODO: make this a full-fledged CStr implementation so no need for to_stdlib
@@ -44,12 +44,14 @@ pub mod minimal_cstr {
     }
 
     impl PartialEq<*const u8> for CStr<'_> {
+        #[allow(clippy::inline_always)]
         #[inline(always)]
         fn eq(&self, other: &*const u8) -> bool {
             self.inner == *other
         }
     }
     impl<'a> PartialEq<CStr<'a>> for *const u8 {
+        #[allow(clippy::inline_always)]
         #[inline(always)]
         fn eq(&self, other: &CStr<'a>) -> bool {
             *self == other.inner
@@ -60,6 +62,21 @@ pub mod minimal_cstr {
     #[allow(clippy::len_without_is_empty)]
     impl<'a> CStr<'a> {
         /// Gets a pointer to the start of this `CStr`.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // this is necessary for the test to not cause UB with miri; this shouldn't be necessary
+        /// //  in normal code.
+        /// const ARGS: [*const u8; 1] = ["argument\0".as_ptr()];
+        /// unsafe { snailx::direct::set_argc_argv(ARGS.len() as u32, ARGS.as_ptr()) };
+        ///
+        /// let first = snailx::Args::new().as_slice().get(0).copied();
+        /// if let Some(c) = first {
+        ///     let p = c.as_ptr();
+        ///     assert!(!p.is_null());
+        /// }
+        /// ```
         #[must_use]
         #[inline(always)]
         pub const fn as_ptr(&self) -> *const u8 {
@@ -69,6 +86,20 @@ pub mod minimal_cstr {
         /// Gets the length of this `CStr`.
         ///
         /// Avoid calling this function more than once.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // this is necessary for the test to not cause UB with miri; this shouldn't be necessary
+        /// //  in normal code.
+        /// const ARGS: [*const u8; 1] = ["argument\0".as_ptr()];
+        /// unsafe { snailx::direct::set_argc_argv(ARGS.len() as u32, ARGS.as_ptr()) };
+        ///
+        /// let first = snailx::Args::new().as_slice().get(0).copied();
+        /// if let Some(c) = first {
+        ///     let _l = c.len();
+        /// }
+        /// ```
         #[must_use]
         #[inline(always)]
         pub fn len(&self) -> usize {
@@ -77,6 +108,21 @@ pub mod minimal_cstr {
 
         #[cfg(all(feature = "std", not(feature = "to_core_cstr")))]
         /// Converts this value into the `std` equivalent.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // this is necessary for the test to not cause UB with miri; this shouldn't be necessary
+        /// //  in normal code.
+        /// const ARGS: [*const u8; 1] = ["argument\0".as_ptr()];
+        /// unsafe { snailx::direct::set_argc_argv(ARGS.len() as u32, ARGS.as_ptr()) };
+        ///
+        /// let first = snailx::Args::new().as_slice().get(0).copied();
+        /// if let Some(c) = first {
+        ///     let s = c.to_stdlib().to_string_lossy();
+        ///     let _ = s.len();
+        /// }
+        /// ```
         #[must_use]
         #[inline(always)]
         pub fn to_stdlib(&self) -> &'a ::std::ffi::CStr {
@@ -96,6 +142,22 @@ pub mod minimal_cstr {
 
         #[cfg(feature = "to_core_cstr")]
         /// Converts this value into the `core` equivalent.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // this is necessary for the test to not cause UB with miri; this shouldn't be necessary
+        /// //  in normal code.
+        /// const ARGS: [*const u8; 1] = ["argument\0".as_ptr()];
+        /// unsafe { snailx::direct::set_argc_argv(ARGS.len() as u32, ARGS.as_ptr()) };
+        ///
+        /// let first = snailx::Args::new().as_slice().get(0).copied();
+        /// if let Some(c) = first {
+        ///     let core_cstr = c.to_stdlib();
+        ///     // Access the raw bytes (without the terminating nul):
+        ///     let _ = core_cstr.to_bytes().len();
+        /// }
+        /// ```
         #[must_use]
         #[inline(always)]
         pub fn to_stdlib(&self) -> &'a core::ffi::CStr {
@@ -114,6 +176,25 @@ pub mod minimal_cstr {
         }
 
         /// Creates a `CStr` from a pointer to its first byte.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // this is necessary for the test to not cause UB with miri; this shouldn't be necessary
+        /// //  in normal code.
+        /// const ARGS: [*const u8; 1] = ["argument\0".as_ptr()];
+        /// unsafe { snailx::direct::set_argc_argv(ARGS.len() as u32, ARGS.as_ptr()) };
+        ///
+        /// let first = snailx::Args::new().as_slice().get(0).copied();
+        /// if let Some(c) = first {
+        ///     let p = c.as_ptr();
+        ///     // SAFETY: Using a pointer provided by the OS for argv is valid here.
+        ///     // Note that this operation is redundant and only an example; `first` was already a
+        ///     //  CStr.
+        ///     let rebuilt = unsafe { snailx::CStr::from_ptr(p) };
+        ///     assert_eq!(rebuilt.as_ptr(), p);
+        /// }
+        /// ```
         ///
         /// # Safety
         ///
