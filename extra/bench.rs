@@ -939,8 +939,8 @@ fn main() {
         .measurement_time(Duration::from_secs(16))
         .warm_up_time(Duration::from_secs(4))
         .nresamples(800_000) // default is 100_000; increase for tighter CIs
-        .noise_threshold(0.001) // treat changes below 0.1% as noise
-        .confidence_level(0.999) // tighter confidence interval
+        .noise_threshold(0.0001) // treat changes below 0.01% as noise
+        .confidence_level(0.9999) // tighter confidence interval
         .configure_from_args();
 
     bench(&mut crit);
