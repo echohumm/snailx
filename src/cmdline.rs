@@ -1,35 +1,5 @@
-use crate::ffi::minimal_cstr::CStr;
-
-/// Returns a slice of <code>[CStr](CStr)<'static></code>.
-///
-/// The slice references the OS-provided storage and should usually not be mutated.
-///
-/// This is a simpler way to iterate over the elements, if preferred.
-///
-/// # Examples
-///
-/// ```
-/// use snailx::args_slice;
-/// let args = args_slice();
-/// // You can inspect or iterate over the CStrs:
-/// let _len = args.len();
-/// ```
-#[must_use]
-#[inline]
-#[cfg_attr(not(feature = "no_cold"), cold)]
-pub fn args_slice() -> &'static [CStr<'static>] {
-    let (argc, argv) = crate::direct::argc_argv();
-    assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
-
-    if argc == 0 {
-        return &[];
-    }
-
-    // SAFETY: argv points to a valid slice of argc count pointers, CStr is repr(transparent) around
-    // a pointer
-    unsafe { switch!(core::slice::from_raw_parts(argv.cast::<CStr<'static>>(), argc as usize)) }
-}
-
+// TODO: this module is no longer necessary except for the below helpers, remove cmdline and put
+//  the below helpers somewhere else
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) mod helpers {
     import! {

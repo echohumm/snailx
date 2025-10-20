@@ -5,10 +5,11 @@ import! {
     {
         default::Default,
         iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
-        ops::Fn,
-        option::Option::{self, None, Some}
+        ops::{Fn, FnMut},
+        option::Option::{self, None, Some},
     }
 }
+
 use {
     crate::{CStr, MappedArgs, cmdline::helpers::try_to_str, iter::helpers::len},
     cmdline::helpers,
@@ -117,7 +118,7 @@ impl Iterator for Args {
     type Item = CStr<'static>;
 
     // TODO: it might be better to have next delegate nth(0) instead of nth delegating to next
-    // good.
+    //  good.
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn next(&mut self) -> Option<CStr<'static>> {
@@ -142,6 +143,16 @@ impl Iterator for Args {
     }
 
     #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<CStr<'static>> {
+        self.next_back()
+    }
+
+    #[inline]
     fn nth(&mut self, n: usize) -> Option<CStr<'static>> {
         if n >= self.len() {
             self.cur = self.end;
@@ -155,13 +166,20 @@ impl Iterator for Args {
     }
 
     #[inline]
-    fn count(self) -> usize {
-        self.len()
-    }
+    fn fold<B, F: FnMut(B, CStr<'static>) -> B>(mut self, mut acc: B, mut f: F) -> B {
+        if self.cur == self.end {
+            return acc;
+        }
+        loop {
+            assume!(!self.cur.is_null() && self.cur < self.end);
+            acc = f(acc, unsafe { CStr::from_ptr(self.cur.read()) });
 
-    #[inline]
-    fn last(mut self) -> Option<CStr<'static>> {
-        self.next_back()
+            self.cur = unsafe { self.cur.add(1) };
+            if self.cur == self.end {
+                break;
+            }
+        }
+        acc
     }
 }
 
@@ -191,6 +209,29 @@ impl DoubleEndedIterator for Args {
         assume!(!self.end.is_null() && self.end > self.cur);
 
         self.next_back()
+    }
+
+    #[inline]
+    fn rfold<B, F: FnMut(B, CStr<'static>) -> B>(mut self, mut acc: B, mut f: F) -> B {
+        if self.cur == self.end {
+            return acc;
+        }
+
+        // TODO: try to make this loop do-while shaped
+        loop {
+            // SAFETY: we just checked that `self.end > self.cur` in the last loop
+            self.end = unsafe { self.end.sub(1) };
+            assume!(!self.end.is_null() && self.end > self.cur);
+
+            // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
+            acc = f(acc, unsafe { CStr::from_ptr(self.end.read()) });
+
+            // SAFETY: next deref is guarded by the if and break below
+            if self.cur == self.end {
+                break;
+            }
+        }
+        acc
     }
 }
 

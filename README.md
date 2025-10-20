@@ -71,8 +71,6 @@ fn main() {
   arguments as `&'static str`
 - `MappedArgs::new<T, F: Fn(*const u8) -> Option<T>>(map: F)` - Iterator over the program arguments as `T`
 - `direct::argc_argv() -> (u32, *const *const u8)` - Raw access to `(argc, argv)`
-- `args_slice() -> &'static [CStr<'static>]` - Slice of the program arguments. This function's safety is a primary
-  reason for the existence of `snailx::CStr`
 
 ### Feature flags
 
@@ -90,8 +88,8 @@ fn main() {
 
 - `Args` - Iterator over program arguments as `snailx::CStr<'static>`
 - `MappedArgs<T, F>` - Generic iterator that applies a mapping function to each argument
-- `CStr<'static>` - Minimal C-style string type for zero-allocation argument access. This exists to make `args_slice()`
-  safe and because this crate is `no_std`, but `core_cstr` was stabilized after its MSRV.
+- `CStr<'static>` - Minimal C-style string type for zero-allocation argument access. This exists because this crate is
+  `no_std`, but `core_cstr` was stabilized after its MSRV.
 
 ## Platform support
 
@@ -152,8 +150,8 @@ fn main() {
 use snailx::MappedArgs;
 
 fn main() {
-    // alternatively, if `infallible_map` is enabled, you can use `MappedArgs::new_infallible()` if you want `size_hint` 
-    // to return an accurate lower bound.
+    // alternatively, if `infallible_map` is enabled, you can use `MappedArgs::new_infallible()` if you want 
+    // `size_hint` to return an accurate lower bound.
     let lengths: Vec<usize> = MappedArgs::new(|ptr| {
         unsafe {
             // simple strlen implementation

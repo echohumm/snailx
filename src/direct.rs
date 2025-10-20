@@ -9,7 +9,6 @@
 ///
 /// ```
 /// let (argc, argv) = snailx::direct::argc_argv();
-/// assert!(argc >= 0);
 /// assert!(!argv.is_null() || argc == 0);
 /// ```
 #[must_use]
@@ -30,8 +29,8 @@ pub fn argc_argv() -> (u32, *const *const u8) {
 ///
 /// # Safety
 ///
-/// The caller must ensure it is safe to modify `argc` and `argv`, and that no concurrent access is
-/// taking place.
+/// The caller must ensure it is safe to modify `argc` and `argv`, no concurrent access is
+/// taking place, and that the provided values are valid.
 ///
 /// # Examples
 ///

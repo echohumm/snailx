@@ -31,8 +31,10 @@ const ARG_SET_8: [*const u8; 8] = [
     "plus one\0".as_ptr()
 ];
 
-const ARG_SET_SPEC: [*const u8; 2] =
-    ["nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(), "zero-width(space; \"\u{200B}\"\0".as_ptr()];
+const ARG_SET_SPEC: [*const u8; 2] = [
+    "nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(),
+    "zero-width(space; \"\u{200B}\"\0".as_ptr()
+];
 
 const ARG_SET_LONG: [*const u8; 2] = [
     "very long argument which includes way too much randomly typed text. should this be \
@@ -59,12 +61,12 @@ const ARG_SET_UTF8: [[*const u8; 3]; 3] = [
 ];
 
 unsafe fn set_args_empty() -> &'static [*const u8] {
-    snailx::direct::set_argc_argv(0, ARG_SET_0.as_ptr());
+    snailx::direct::set_argc_argv(ARG_SET_0.len() as u32, ARG_SET_0.as_ptr());
     &ARG_SET_0
 }
 
 unsafe fn set_args_one() -> &'static [*const u8] {
-    snailx::direct::set_argc_argv(1, ARG_SET_1.as_ptr());
+    snailx::direct::set_argc_argv(ARG_SET_1.len() as u32, ARG_SET_1.as_ptr());
     &ARG_SET_1
 }
 
@@ -176,7 +178,14 @@ fn len() {
 fn cstrs_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::Args::new().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| unsafe { CStr::from_ptr(s) }).collect::<Vec<_>>().as_slice());
+        assert_eq!(
+            snailx::Args::new().collect::<Vec<_>>().as_slice(),
+            a
+                .iter()
+                .map(|&s| unsafe { CStr::from_ptr(s) })
+                .collect::<Vec<_>>()
+                .as_slice()
+        );
     }
 }
 
@@ -184,7 +193,14 @@ fn cstrs_correct() {
 fn slice_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::args_slice(), a.iter().map(|&s| unsafe { CStr::from_ptr(s) }).collect::<Vec<_>>().as_slice());
+        assert_eq!(
+            snailx::Args::new().as_slice(),
+            a
+                .iter()
+                .map(|&s| unsafe { CStr::from_ptr(s) })
+                .collect::<Vec<_>>()
+                .as_slice()
+        );
     }
 }
 
@@ -192,7 +208,14 @@ fn slice_correct() {
 fn os_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::MappedArgs::osstr().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::to_osstr(s).unwrap()).collect::<Vec<_>>());
+        assert_eq!(
+            snailx::MappedArgs::osstr()
+                .collect::<Vec<_>>()
+                .as_slice(),
+            a
+                .iter()
+                .map(|&s| snailx::bench_helpers::to_osstr(s).unwrap()).collect::<Vec<_>>()
+        );
     }
 }
 
@@ -200,7 +223,7 @@ fn os_correct() {
 fn slice() {
     test_i! {
         a,
-        let args = snailx::args_slice();
+        let args = snailx::Args::new().as_slice();
 
         assert_eq!(args, a);
     }
@@ -238,10 +261,16 @@ fn cstr_nth() {
 
         // consumes first 3 if they exist
         if !a.is_empty() {
-            assert_eq!(args.nth(0).unwrap().to_stdlib(), unsafe { CStr::from_ptr(a[0]).to_stdlib() });
+            assert_eq!(
+                args.nth(0).unwrap().to_stdlib(),
+                unsafe { CStr::from_ptr(a[0]).to_stdlib() }
+            );
         }
         if a.len() > 2 {
-            assert_eq!(args.nth(1).unwrap().to_stdlib(), unsafe { CStr::from_ptr(a[2]).to_stdlib() });
+            assert_eq!(
+                args.nth(1).unwrap().to_stdlib(),
+                unsafe { CStr::from_ptr(a[2]).to_stdlib() }
+            );
         }
 
         // checks that the remaining count is correct
@@ -304,6 +333,8 @@ fn os_size_hint_and_len() {
     }
 }
 
+// TODO: test all utf8 tests with test_utf8, not just test_i/first 2 utf8 sets
+
 // utf-8 validity tests
 
 #[cfg(not(feature = "assume_valid_str"))]
@@ -326,7 +357,11 @@ macro_rules! test_utf8 {
 fn utf8_correct() {
     test_i! {
         a,
-        assert_eq!(snailx::MappedArgs::utf8().collect::<Vec<_>>().as_slice(), a.iter().map(|&s| snailx::bench_helpers::try_to_str(s).unwrap()).collect::<Vec<_>>());
+        assert_eq!(
+            snailx::MappedArgs::utf8().collect::<Vec<_>>().as_slice(),
+            a.iter().map(|&s| snailx::bench_helpers::try_to_str(s).unwrap())
+                .collect::<Vec<_>>()
+        );
     }
 }
 
@@ -368,7 +403,16 @@ fn try_to_str() {
         v, a,
         for &arg in a {
             if v {
-                assert_eq!(snailx::bench_helpers::try_to_str(arg), Some(unsafe { snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(arg, strlen(arg)))) }));
+                assert_eq!(
+                    snailx::bench_helpers::try_to_str(arg),
+                    Some(unsafe {
+                        snailx::switch!(
+                            core::str::from_utf8_unchecked(
+                                core::slice::from_raw_parts(arg, strlen(arg))
+                            )
+                        )
+                    })
+                );
             } else {
                 assert!(snailx::bench_helpers::try_to_str(arg).is_none());
             }
@@ -387,7 +431,16 @@ fn utf8_iter_no_invalid() {
             let arg = args.next();
 
             if v && i < a.len() {
-                assert_eq!(arg, Some(unsafe { snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(a[i], strlen(a[i])))) }));
+               assert_eq!(
+                    arg,
+                    Some(unsafe {
+                        snailx::switch!(
+                            core::str::from_utf8_unchecked(
+                                core::slice::from_raw_parts(a[i], strlen(a[i]))
+                            )
+                        )
+                    })
+                );
             } else {
                 assert!(arg.is_none());
             }
@@ -405,7 +458,16 @@ fn utf8_nth_no_invalid() {
         let arg = args.nth(1);
 
         if v {
-            assert_eq!(arg, Some(unsafe { snailx::switch!(core::str::from_utf8_unchecked(core::slice::from_raw_parts(a[1], strlen(a[1])))) }));
+            assert_eq!(
+                    arg,
+                    Some(unsafe {
+                        snailx::switch!(
+                            core::str::from_utf8_unchecked(
+                                core::slice::from_raw_parts(a[1], strlen(a[1]))
+                            )
+                        )
+                    })
+                );
         } else {
             assert!(arg.is_none());
         }
@@ -652,4 +714,82 @@ fn utf8_skips_invalid_back() {
         })
     );
     assert!(args.next_back().is_none());
+}
+
+// fold/rfold tests
+
+#[test]
+fn cstr_fold_count() {
+    test_i! {
+        a,
+
+        let cnt = snailx::Args::new().fold(0usize, |acc, _| acc + 1);
+        assert_eq!(cnt, a.len());
+    }
+}
+
+#[test]
+fn cstr_rfold_count() {
+    test_i! {
+        a,
+        let cnt = snailx::Args::new().rfold(0usize, |acc, _| acc + 1);
+        assert_eq!(cnt, a.len());
+    }
+}
+
+#[test]
+fn cstr_fold_strlen_sum() {
+    test_i! {
+        a,
+        let total = snailx::Args::new().fold(0usize, |acc, c| {
+            acc + unsafe { strlen(c.as_ptr()) }
+        });
+        let expect = a.iter().map(|&p| unsafe { strlen(p) }).sum::<usize>();
+        assert_eq!(total, expect);
+    }
+}
+
+#[test]
+fn cstr_rfold_strlen_sum() {
+    test_i! {
+        a,
+        let total = snailx::Args::new().rfold(0usize, |acc, c| {
+            acc + unsafe { strlen(c.as_ptr()) }
+        });
+        let expect = a.iter().map(|&p| unsafe { strlen(p) }).sum::<usize>();
+        assert_eq!(total, expect);
+    }
+}
+
+#[test]
+fn utf8_fold_collect_correct() {
+    test_i! {
+        a,
+        let got = snailx::MappedArgs::utf8().fold(Vec::new(), |mut v, s| {
+            v.push(s);
+            v
+        });
+        let expect: Vec<_> = a
+            .iter()
+            .filter_map(|&p| snailx::bench_helpers::try_to_str(p))
+            .collect();
+        assert_eq!(got.as_slice(), expect.as_slice());
+    }
+}
+
+#[test]
+fn utf8_rfold_collect_correct() {
+    test_i! {
+        a,
+        let got = snailx::MappedArgs::utf8().rfold(Vec::new(), |mut v, s| {
+            v.push(s);
+            v
+        });
+        let expect: Vec<_> = a
+            .iter()
+            .filter_map(|&p| snailx::bench_helpers::try_to_str(p))
+            .rev()
+            .collect();
+        assert_eq!(got.as_slice(), expect.as_slice());
+    }
 }

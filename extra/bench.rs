@@ -103,7 +103,7 @@ fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::Args::new,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -116,7 +116,7 @@ fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::osstr,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -128,7 +128,7 @@ fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::utf8,
             |args| {
-                while let Some(s) = black_box(args).next_back() {
+                while let Some(s) = black_box(black_box(&mut *args).next_back()) {
                     black_box(s);
                 }
             },
@@ -170,6 +170,84 @@ fn bench_snailx_nth_back_minimal(c: &mut Criterion) {
             snailx::MappedArgs::utf8,
             |args| {
                 let _ = black_box(black_box(args).nth_back(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_fold_minimal(c: &mut Criterion) {
+    unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
+
+    let mut group = c.benchmark_group("snailx/minimal/fold");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_rfold_minimal(c: &mut Criterion) {
+    unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
+
+    let mut group = c.benchmark_group("snailx/minimal/rfold");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
             },
             BatchSize::SmallInput
         );
@@ -252,7 +330,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::Args::new,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -265,7 +343,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::osstr,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -277,7 +355,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::utf8,
             |args| {
-                while let Some(s) = black_box(args).next_back() {
+                while let Some(s) = black_box(black_box(&mut *args).next_back()) {
                     black_box(s);
                 }
             },
@@ -289,7 +367,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
         b.iter_batched_ref(
             std::env::args_os,
             |args_os| {
-                while let Some(arg) = black_box(args_os).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args_os).next_back()) {
                     black_box(arg);
                 }
             },
@@ -301,7 +379,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
         b.iter_batched_ref(
             std::env::args,
             |args_s| {
-                while let Some(arg) = black_box(args_s).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args_s).next_back()) {
                     black_box(arg);
                 }
             },
@@ -420,6 +498,63 @@ fn bench_nth_snailx_vs_std(c: &mut Criterion) {
             std::env::args,
             |args| {
                 let _ = black_box(black_box(args).nth(black_box(0)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "std")]
+fn bench_fold_snailx_vs_std(c: &mut Criterion) {
+    let mut group = c.benchmark_group("args/fold/snailx_vs_std");
+
+    group.bench_function("snailx_cstr", |b| {
+        b.iter_batched_ref(
+            snailx::Args::new,
+            |args| {
+                black_box(black_box(args).fold(black_box(0usize), black_box(|acc, _| acc + 1)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("snailx_osstr", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::osstr,
+            |args| {
+                black_box(black_box(args).fold(black_box(0usize), black_box(|acc, _| acc + 1)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("snailx_str", |b| {
+        b.iter_batched_ref(
+            snailx::MappedArgs::utf8,
+            |args| {
+                black_box(black_box(args).fold(black_box(0usize), black_box(|acc, _| acc + 1)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_osstring", |b| {
+        b.iter_batched_ref(
+            std::env::args_os,
+            |args_os| {
+                black_box(black_box(args_os).fold(black_box(0usize), black_box(|acc, _| acc + 1)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("std_string", |b| {
+        b.iter_batched_ref(
+            std::env::args,
+            |args_s| {
+                black_box(black_box(args_s).fold(black_box(0usize), black_box(|acc, _| acc + 1)));
             },
             BatchSize::SmallInput
         );
@@ -551,7 +686,7 @@ fn bench_snailx_iter_back_preset(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::Args::new,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -564,7 +699,7 @@ fn bench_snailx_iter_back_preset(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::osstr,
             |args| {
-                while let Some(arg) = black_box(args).next_back() {
+                while let Some(arg) = black_box(black_box(&mut *args).next_back()) {
                     black_box(arg);
                 }
             },
@@ -576,7 +711,7 @@ fn bench_snailx_iter_back_preset(c: &mut Criterion) {
         b.iter_batched_ref(
             snailx::MappedArgs::utf8,
             |args| {
-                while let Some(s) = black_box(args).next_back() {
+                while let Some(s) = black_box(black_box(&mut *args).next_back()) {
                     black_box(s);
                 }
             },
@@ -623,6 +758,94 @@ fn bench_snailx_nth_back_preset(c: &mut Criterion) {
             snailx::MappedArgs::utf8,
             |args| {
                 let _ = black_box(black_box(args).nth_back(black_box(5)));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_fold_preset(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(
+            ARGV_PRESET_CMDLINE.len() as u32,
+            ARGV_PRESET_CMDLINE.as_ptr()
+        )
+    };
+
+    let mut group = c.benchmark_group("snailx/preset/fold");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).fold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_snailx_rfold_preset(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(
+            ARGV_PRESET_CMDLINE.len() as u32,
+            ARGV_PRESET_CMDLINE.as_ptr()
+        )
+    };
+
+    let mut group = c.benchmark_group("snailx/preset/rfold");
+
+    group.bench_function("cstr", |b| {
+        b.iter_batched(
+            snailx::Args::new,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    #[cfg(feature = "std")]
+    group.bench_function("osstr", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::osstr,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("str", |b| {
+        b.iter_batched(
+            snailx::MappedArgs::utf8,
+            |args| {
+                let _ = black_box(black_box(args).rfold(0usize, |acc, _| acc + 1));
             },
             BatchSize::SmallInput
         );
@@ -680,21 +903,32 @@ fn bench_snailx_helpers(c: &mut Criterion) {
 pub fn bench(c: &mut Criterion) {
     bench_snailx_iter_minimal(c);
     bench_snailx_iter_back_minimal(c);
+
     bench_snailx_nth_minimal(c);
     bench_snailx_nth_back_minimal(c);
+
+    bench_snailx_fold_minimal(c);
+    bench_snailx_rfold_minimal(c);
 
     #[cfg(feature = "std")]
     {
         bench_iter_snailx_vs_std(c);
         bench_iter_back_snailx_vs_std(c);
+
         bench_nth_snailx_vs_std(c);
         bench_nth_back_snailx_vs_std(c);
+
+        bench_fold_snailx_vs_std(c);
     }
 
     bench_snailx_iter_preset(c);
     bench_snailx_iter_back_preset(c);
+
     bench_snailx_nth_preset(c);
     bench_snailx_nth_back_preset(c);
+
+    bench_snailx_fold_preset(c);
+    bench_snailx_rfold_preset(c);
 
     bench_snailx_helpers(c);
 }

@@ -1,3 +1,5 @@
+// TODO: try to implement try_fold/_rfold for both
+
 pub mod args;
 pub mod mapped_args;
 
@@ -9,12 +11,9 @@ pub mod helpers {
     ///
     /// See [`<*const *const u8>::offset_from`].
     // apparently the old implementation was painfully slow lol
-    #[allow(clippy::checked_conversions, clippy::must_use_candidate, missing_docs)]
+    #[allow(clippy::cast_sign_loss, clippy::must_use_candidate, missing_docs)]
     #[inline]
     pub unsafe fn len(cur: *const *const u8, end: *const *const u8) -> usize {
-        #[allow(clippy::cast_sign_loss)]
-        unsafe {
-            end.offset_from(cur) as usize
-        }
+        end.offset_from(cur) as usize
     }
 }

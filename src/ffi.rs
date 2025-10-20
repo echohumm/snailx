@@ -224,4 +224,20 @@ pub mod minimal_cstr {
             CStr { inner: p, _marker: PhantomData }
         }
     }
+    
+    #[cfg(all(feature = "std", not(feature = "to_core_cstr")))]
+    #[allow(unused_qualifications)]
+    impl<'a> core::convert::From<CStr<'a>> for &'a ::std::ffi::CStr {
+        fn from(c: CStr<'a>) -> &'a ::std::ffi::CStr {
+            c.to_stdlib()
+        }
+    }
+
+    #[cfg(feature = "to_core_cstr")]
+    #[allow(unused_qualifications)]
+    impl<'a> core::convert::From<CStr<'a>> for &'a core::ffi::CStr {
+        fn from(c: CStr<'a>) -> &'a core::ffi::CStr {
+            c.to_stdlib()
+        }
+    }
 }

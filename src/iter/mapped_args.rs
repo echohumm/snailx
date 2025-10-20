@@ -9,7 +9,7 @@ import! {
 }
 use {super::helpers::len, CStr, cmdline::helpers, direct};
 
-// TODO: count() impl
+// TODO: may be better to not implement certain things manually and just delegate to fold
 
 // /// This enum is used to determine what to do when an argument fails to parse.
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -190,13 +190,34 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
         }
     }
 
+    #[cfg(feature = "infallible_map")]
+    #[inline]
+    fn count(self) -> usize {
+        if self.fallible {
+            self.fold(0, |count, _| count + 1)
+        } else {
+            // SAFETY: the pointers are guaranteed to be valid for len() as they are from argv
+            unsafe { len(self.cur, self.end) }
+        }
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Ret> {
+        self.next_back()
+    }
+
+    // FIXME: this is wrong as it assumes that the iterator is infallible; higher indexes on a
+    // fallible iterator may  cause UB
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
+        // SAFETY: the pointers are guaranteed to be valid for len() as they are from argv
         if n >= unsafe { len(self.cur, self.end) } {
             self.cur = self.end;
             return None;
         }
 
+        // TODO: instead of just a raw add n, make it n *valid* elements
+        // SAFETY: we just checked that `self.cur + n` is in bounds
         self.cur = unsafe { self.cur.add(n) };
         assume!(!self.cur.is_null() && self.cur < self.end);
 
@@ -204,8 +225,52 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     }
 
     #[inline]
-    fn fold<B, G: FnMut(B, Ret) -> B>(self, init: B, f: G) -> B {
-        map_helpers::fold(self, init, f, <*const *const u8>::add, usize::checked_add)
+    fn fold<B, G: FnMut(B, Ret) -> B>(mut self, mut acc: B, mut f: G) -> B {
+        if self.cur == self.end {
+            return acc;
+        }
+
+        loop {
+            assume!(!self.cur.is_null() && self.cur < self.end);
+            // SAFETY: we just checked that `self.cur` is in bounds
+            let p = self.cur;
+            self.cur = unsafe { self.cur.add(1) };
+
+            #[cfg(not(feature = "infallible_map"))]
+            {
+                // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
+                if let Some(v) = (self.map)(unsafe { p.read() }) {
+                    acc = f(acc, v);
+                }
+            }
+            #[cfg(feature = "infallible_map")]
+            {
+                if self.fallible {
+                    // SAFETY: the pointer is from argv, which always contains valid pointers to
+                    //  cstrs
+                    if let Some(v) = (self.map)(unsafe { p.read() }) {
+                        acc = f(acc, v);
+                    }
+                } else {
+                    // SAFETY: caller guarantees that the map is infallible
+                    acc = f(
+                        acc,
+                        assume!(
+                            car,
+                            Some,
+                            e,
+                            unsafe { (self.map)(p.read()) },
+                            "map is infallible, but returned None"
+                        )
+                    );
+                }
+            }
+
+            if self.cur == self.end {
+                break;
+            }
+        }
+        acc
     }
 }
 
@@ -243,48 +308,47 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
     }
 
     #[inline]
-    fn rfold<B, G: FnMut(B, Ret) -> B>(self, init: B, f: G) -> B {
-        map_helpers::fold(self, init, f, <*const *const u8>::sub, usize::checked_sub)
-    }
-}
-
-mod map_helpers {
-    import! {
-        {
-            ops::{Fn, FnMut},
-            option::Option::{self, Some}
-        }
-    }
-    use crate::{MappedArgs, iter::helpers::len};
-
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn fold<Ret, F: Fn(*const u8) -> Option<Ret>, B, G: FnMut(B, Ret) -> B>(
-        slf: MappedArgs<Ret, F>,
-        mut acc: B,
-        mut f: G,
-        modfun: unsafe fn(*const *const u8, usize) -> *const *const u8,
-        check: fn(usize, usize) -> Option<usize>
-    ) -> B {
-        let len = unsafe { len(slf.cur, slf.end) };
-        if len == 0 {
+    fn rfold<B, G: FnMut(B, Ret) -> B>(mut self, mut acc: B, mut f: G) -> B {
+        if self.cur == self.end {
             return acc;
         }
 
-        let mut i = 0;
-
         loop {
-            // SAFETY: we just checked that `self.cur + i` is in bounds, pointer is from argv which
-            // always contains valid pointers to cstrs
-            if let Some(v) = (slf.map)(unsafe { modfun(slf.cur, i).read() }) {
-                acc = f(acc, v);
+            // SAFETY: we just checked that `self.cur < self.end` in the last loop
+            self.end = unsafe { self.end.sub(1) };
+            assume!(!self.end.is_null() && self.end > self.cur);
+
+            #[cfg(not(feature = "infallible_map"))]
+            {
+                // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
+                if let Some(v) = (self.map)(unsafe { self.end.read() }) {
+                    acc = f(acc, v);
+                }
+            }
+            #[cfg(feature = "infallible_map")]
+            {
+                if self.fallible {
+                    // SAFETY: the pointer is from argv, which always contains valid pointers to
+                    // cstrs
+                    if let Some(v) = (self.map)(unsafe { self.end.read() }) {
+                        acc = f(acc, v);
+                    }
+                } else {
+                    // SAFETY: caller guarantees that the map is infallible
+                    acc = f(
+                        acc,
+                        assume!(
+                            car,
+                            Some,
+                            e,
+                            unsafe { (self.map)(self.end.read()) },
+                            "map is infallible, but returned None"
+                        )
+                    );
+                }
             }
 
-            assume!(check(i, 1).is_some(), "integer overflow");
-            i += 1;
-
-            if i == len {
+            if self.cur == self.end {
                 break;
             }
         }

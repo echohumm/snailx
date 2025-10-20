@@ -29,6 +29,8 @@ __testing_bl_166 = []
 ## benchmarking with std
 ### with str checks
 __full_pure_bench = ["__pure_bench", "std"]
+### with str checks but infallible mapping optimizations
+__full_pure_opt_bench = ["__pure_opt_bench", "std"]
 ### without str checks
 __full_opt_bench = ["__opt_bench", "std"]
 ### worst case scenario
@@ -37,8 +39,10 @@ __full_worst_bench = ["__worst_bench", "std"]
 ## benchmarking without std
 ### with str checks
 __pure_bench = ["__bench", "no_cold"]
+### with str checks but infallible mapping optimizations
+__pure_opt_bench = ["__pure_bench", "infallible_map"]
 ### without str checks
-__opt_bench = ["__pure_bench", "assume_valid_str"]
+__opt_bench = ["__pure_bench", "infallible_map", "assume_valid_str"]
 ### worst case scenario
 __worst_bench = ["__bench"]
 
@@ -63,14 +67,14 @@ infallible_map = []
 
 # commented out until usage because it's a higher msrv than the crate
 
-#[[bench]]
-#name = "bench_gen"
-#path = "extra/bench.rs"
-#harness = false
-#required-features = ["__bench"]
-#
-#[dev-dependencies]
-#criterion = "0.7.0"
+[[bench]]
+name = "bench_gen"
+path = "extra/bench.rs"
+harness = false
+required-features = ["__bench"]
+
+[dev-dependencies]
+criterion = "0.7.0"
 
 [[test]]
 name = "tests_gen"

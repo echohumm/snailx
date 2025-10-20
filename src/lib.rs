@@ -13,7 +13,7 @@
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
 
-// TODO: make sure every iterator method we impl has tests + benches (fold, count, last)
+// TODO: make sure every iterator method we impl has tests + benches (fold, rfold, count, last)
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![no_implicit_prelude]
@@ -80,6 +80,18 @@ macro_rules! assume {
         }
     };
 
+    // carry out
+    (car, $exp:ident, $in_name:ident, $e:expr, $($msg:tt)+) => {
+        if let $exp($in_name) = $e {
+            $in_name
+        } else {
+            #[allow(unused_unsafe)]
+            unsafe {
+                switch!(core::hint::unreachable_unchecked(););
+            }
+        }
+    };
+
     // custom message for both debug and release
     ($e:expr, $($msg:tt)+) => {
         if !$e {
@@ -106,7 +118,6 @@ mod iter;
 #[cfg(any(debug_assertions, not(feature = "assume_valid_str")))] mod str_checks;
 
 pub use {
-    cmdline::*,
     ffi::minimal_cstr::CStr,
     iter::{args::*, mapped_args::*}
 };
