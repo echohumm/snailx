@@ -94,6 +94,7 @@ fn bench_snailx_nth_minimal(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
     unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
 
@@ -139,6 +140,7 @@ fn bench_snailx_iter_back_minimal(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_nth_back_minimal(c: &mut Criterion) {
     unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
 
@@ -217,6 +219,7 @@ fn bench_snailx_fold_minimal(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_rfold_minimal(c: &mut Criterion) {
     unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
 
@@ -323,7 +326,7 @@ fn bench_iter_snailx_vs_std(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", feature = "rev_iter"))]
 fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
     let mut group = c.benchmark_group("args/iterate_back/snailx_vs_std");
     group.bench_function("snailx_cstr_back", |b| {
@@ -390,7 +393,7 @@ fn bench_iter_back_snailx_vs_std(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", feature = "rev_iter"))]
 fn bench_nth_back_snailx_vs_std(c: &mut Criterion) {
     let mut group = c.benchmark_group("args/nth_back/snailx_vs_std");
 
@@ -549,7 +552,7 @@ fn bench_fold_snailx_vs_std(c: &mut Criterion) {
             BatchSize::SmallInput
         );
     });
-
+    
     group.bench_function("std_string", |b| {
         b.iter_batched_ref(
             std::env::args,
@@ -672,6 +675,7 @@ fn bench_snailx_nth_preset(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_iter_back_preset(c: &mut Criterion) {
     unsafe {
         snailx::direct::set_argc_argv(
@@ -722,6 +726,7 @@ fn bench_snailx_iter_back_preset(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_nth_back_preset(c: &mut Criterion) {
     unsafe {
         snailx::direct::set_argc_argv(
@@ -810,6 +815,7 @@ fn bench_snailx_fold_preset(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "rev_iter")]
 fn bench_snailx_rfold_preset(c: &mut Criterion) {
     unsafe {
         snailx::direct::set_argc_argv(
@@ -902,32 +908,40 @@ fn bench_snailx_helpers(c: &mut Criterion) {
 
 pub fn bench(c: &mut Criterion) {
     bench_snailx_iter_minimal(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_iter_back_minimal(c);
 
     bench_snailx_nth_minimal(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_nth_back_minimal(c);
 
     bench_snailx_fold_minimal(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_rfold_minimal(c);
 
     #[cfg(feature = "std")]
     {
         bench_iter_snailx_vs_std(c);
+        #[cfg(feature = "rev_iter")]
         bench_iter_back_snailx_vs_std(c);
 
         bench_nth_snailx_vs_std(c);
+        #[cfg(feature = "rev_iter")]
         bench_nth_back_snailx_vs_std(c);
 
         bench_fold_snailx_vs_std(c);
     }
 
     bench_snailx_iter_preset(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_iter_back_preset(c);
 
     bench_snailx_nth_preset(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_nth_back_preset(c);
 
     bench_snailx_fold_preset(c);
+    #[cfg(feature = "rev_iter")]
     bench_snailx_rfold_preset(c);
 
     bench_snailx_helpers(c);

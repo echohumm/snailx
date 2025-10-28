@@ -3,7 +3,7 @@
 use std::{
     env::{self, current_dir},
     ffi::OsString,
-    fs::{read_to_string, write},
+    fs::{create_dir, read_to_string, write},
     process::{Command, exit}
 };
 
@@ -69,8 +69,15 @@ fn rust_version() -> Version {
 fn main() {
     let v = rust_version();
     let cwd = current_dir().expect("failed to get current directory");
-    let raw_src = cwd.join("src");
-    let direct_src = raw_src.join("direct.rs.src");
+
+    let src_dir = cwd.join("src");
+
+    let out_dir = src_dir.join("generated");
+    if !out_dir.exists() {
+        create_dir(&out_dir).expect("failed to create generated code directory");
+    }
+
+    let direct_src = src_dir.join("direct.rs.src");
 
     // Let Cargo know when to rerun the build script for the Rust source generation
     println!("cargo:rerun-if-changed={}", direct_src.display());
@@ -94,7 +101,7 @@ fn main() {
     //     &env::var("WIN_BUFSIZE").unwrap_or_else(|_| String::from("1024"))
     // )
 
-    let dst_path = raw_src.join("direct.rs");
+    let dst_path = out_dir.join("direct.rs");
 
     // only write if the destination differs to avoid unnecessary i/o
     if let Ok(existing) = read_to_string(&dst_path) {

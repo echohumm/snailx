@@ -3,12 +3,7 @@
 ## General information
 
 - MSRV: 1.48.0
-    - Only benchmarked on latest stable and nightly.
-    - Tests require `-- --test-threads=1` on earlier rustc versions to run without race conditions causing spurious
-      failures.
-        - These are spurious as it is a documented safety condition of `snailx::direct::set_argc_argv()` that there is
-          no
-          concurrent access.
+    - Only benchmarked on latest nightly.
 - Licenses: GPL-3.0, MIT
 
 ## Overview

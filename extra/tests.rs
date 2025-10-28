@@ -1,10 +1,19 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::iter_nth_zero)]
+extern crate core;
 extern crate snailx;
 
-// TODO: format to shorten all long lines (cargo fmt ignores macro input)
+use {
+    core::{
+        hint::spin_loop,
+        sync::atomic::{AtomicBool, Ordering}
+    },
+    snailx::{CStr, bench_helpers::strlen}
+};
 
-use snailx::{CStr, bench_helpers::strlen};
+// used as it is a documented safety condition (which tests decide to violate by default) that
+//  `set_argc_argv()` is called while there is no other concurrent access.
+static GLOBAL_LOCK: AtomicBool = AtomicBool::new(false);
 
 const ARG_SET_0: [*const u8; 0] = [];
 
@@ -31,10 +40,8 @@ const ARG_SET_8: [*const u8; 8] = [
     "plus one\0".as_ptr()
 ];
 
-const ARG_SET_SPEC: [*const u8; 2] = [
-    "nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(),
-    "zero-width(space; \"\u{200B}\"\0".as_ptr()
-];
+const ARG_SET_SPEC: [*const u8; 2] =
+    ["nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(), "zero-width(space; \"\u{200B}\"\0".as_ptr()];
 
 const ARG_SET_LONG: [*const u8; 2] = [
     "very long argument which includes way too much randomly typed text. should this be \
@@ -116,7 +123,25 @@ macro_rules! test_i {
             )*
         }
 
+        // used to prevent panics from deadlocking the testing process
+        struct PanicHandler {}
+        impl PanicHandler {
+            fn new() -> PanicHandler {
+                while GLOBAL_LOCK.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    spin_loop();
+                }
+                PanicHandler {}
+            }
+        }
+        impl Drop for PanicHandler {
+            fn drop(&mut self) {
+                GLOBAL_LOCK.store(false, Ordering::SeqCst);
+            }
+        }
+
         unsafe {
+            let panic_handler = PanicHandler::new();
+
             test_inner(set_args_odd());
             test_inner(set_args_even());
             test_inner(set_args_empty());
@@ -129,6 +154,11 @@ macro_rules! test_i {
             test_inner(set_args_null());
 
             test_inner(set_args_utf8(0));
+
+            // TODO: use other 2 utf8 sets as well
+
+            // suppress warning and drop the handler to unlock
+            drop(panic_handler);
         }
     }
 }
@@ -158,7 +188,7 @@ fn iter_count() {
             cnt += 1;
         }
         assert_eq!(cnt, a.len());
-
+        assert_eq!(snailx::Args::new().count(), cnt);
     }
 }
 
@@ -250,6 +280,21 @@ fn os_iter() {
         for (i, arg) in args.enumerate() {
             assert_eq!(arg, snailx::bench_helpers::to_osstr(a[i]).unwrap());
         }
+    }
+}
+
+#[test]
+fn os_count() {
+    test_i! {
+        a,
+        let args = snailx::MappedArgs::osstr();
+
+        let mut cnt = 0;
+        for _ in args {
+            cnt += 1;
+        }
+        assert_eq!(cnt, a.len());
+        assert_eq!(snailx::MappedArgs::osstr().count(), cnt);
     }
 }
 
@@ -374,6 +419,21 @@ fn utf8_iter() {
         for (i, arg) in args.enumerate() {
             assert_eq!(arg, snailx::bench_helpers::try_to_str(a[i]).unwrap());
         }
+    }
+}
+
+#[test]
+fn utf8_count() {
+    test_i! {
+        a,
+        let args = snailx::MappedArgs::utf8();
+
+        let mut cnt = 0;
+        for _ in args {
+            cnt += 1;
+        }
+        assert_eq!(cnt, a.len());
+        assert_eq!(snailx::MappedArgs::utf8().count(), cnt);
     }
 }
 
@@ -504,6 +564,7 @@ fn utf8_skips_invalid() {
 
 // reversed iteration tests
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn iter_count_back() {
     test_i! {
@@ -515,9 +576,11 @@ fn iter_count_back() {
             cnt += 1;
         }
         assert_eq!(cnt, a.len());
+        assert_eq!(snailx::Args::new().rev().count(), cnt);
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn cstr_iter_back() {
     test_i! {
@@ -531,6 +594,7 @@ fn cstr_iter_back() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn os_iter_back() {
     test_i! {
@@ -544,6 +608,23 @@ fn os_iter_back() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
+#[test]
+fn os_count_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::osstr();
+
+        let mut cnt = 0;
+        while args.next_back().is_some() {
+            cnt += 1;
+        }
+        assert_eq!(cnt, a.len());
+        assert_eq!(snailx::MappedArgs::osstr().rev().count(), cnt);
+    }
+}
+
+#[cfg(feature = "rev_iter")]
 #[test]
 fn cstr_nth_back() {
     test_i! {
@@ -569,6 +650,7 @@ fn cstr_nth_back() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn os_nth_back() {
     test_i! {
@@ -594,6 +676,7 @@ fn os_nth_back() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn utf8_iter_back() {
     test_i! {
@@ -607,6 +690,23 @@ fn utf8_iter_back() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
+#[test]
+fn utf8_count_back() {
+    test_i! {
+        a,
+        let mut args = snailx::MappedArgs::utf8();
+
+        let mut cnt = 0;
+        while args.next_back().is_some() {
+            cnt += 1;
+        }
+        assert_eq!(cnt, a.len());
+        assert_eq!(snailx::MappedArgs::utf8().rev().count(), cnt);
+    }
+}
+
+#[cfg(feature = "rev_iter")]
 #[test]
 fn utf8_nth_back() {
     test_i! {
@@ -634,7 +734,7 @@ fn utf8_nth_back() {
 
 // utf-8 reversed tests for invalid/mixed data
 
-#[cfg(not(feature = "assume_valid_str"))]
+#[cfg(all(not(feature = "assume_valid_str"), feature = "rev_iter"))]
 #[test]
 fn utf8_iter_no_invalid_back() {
     test_utf8! {
@@ -662,7 +762,7 @@ fn utf8_iter_no_invalid_back() {
     }
 }
 
-#[cfg(not(feature = "assume_valid_str"))]
+#[cfg(all(not(feature = "assume_valid_str"), feature = "rev_iter"))]
 #[test]
 fn utf8_nth_no_invalid_back() {
     test_utf8! {
@@ -688,7 +788,7 @@ fn utf8_nth_no_invalid_back() {
     }
 }
 
-#[cfg(not(feature = "assume_valid_str"))]
+#[cfg(all(not(feature = "assume_valid_str"), feature = "rev_iter"))]
 #[test]
 fn utf8_skips_invalid_back() {
     let a = unsafe { set_args_utf8(2) };
@@ -728,6 +828,7 @@ fn cstr_fold_count() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn cstr_rfold_count() {
     test_i! {
@@ -749,6 +850,7 @@ fn cstr_fold_strlen_sum() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn cstr_rfold_strlen_sum() {
     test_i! {
@@ -777,6 +879,7 @@ fn utf8_fold_collect_correct() {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 #[test]
 fn utf8_rfold_collect_correct() {
     test_i! {

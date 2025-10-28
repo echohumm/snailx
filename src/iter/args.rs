@@ -1,13 +1,18 @@
-// TODO: optimize this in general, maybe add fold impls
+// TODO: optimize this in general
 #![allow(clippy::while_let_on_iterator)]
 
 import! {
     {
         default::Default,
-        iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator},
+        iter::{ExactSizeIterator, FusedIterator, Iterator},
         ops::{Fn, FnMut},
         option::Option::{self, None, Some},
     }
+}
+
+#[cfg(feature = "rev_iter")]
+import! {
+    iter::DoubleEndedIterator
 }
 
 use {
@@ -33,8 +38,6 @@ impl Default for Args {
 impl Args {
     /// Creates a new `Args` instance.
     #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     // cold because these are usually called once at startup
     #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn new() -> Args {
@@ -56,6 +59,7 @@ impl Args {
     /// Map this iterator to a different type. Like [`MappedArgs::new`], but operates on an existing
     /// iterator.
     #[must_use]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn map_ty<Ret, F: Fn(*const u8) -> Option<Ret>>(&self, map: F) -> MappedArgs<Ret, F> {
         MappedArgs {
             cur: self.cur,
@@ -71,6 +75,7 @@ impl Args {
     /// Map this iterator to a different type. Like [`MappedArgs::new_infallible`], but operates on
     /// an existing iterator.
     #[must_use]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn map_ty_infallible<Ret, F: Fn(*const u8) -> Option<Ret>>(
         &self,
         map: F
@@ -81,6 +86,7 @@ impl Args {
     /// Map this iterator to `&'static str`. Like [`MappedArgs::utf8`], but operates on an existing
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
         MappedArgs {
             cur: self.cur,
@@ -99,6 +105,7 @@ impl Args {
     /// existing iterator.
     #[must_use]
     #[allow(unused_qualifications)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn map_os(
         &self
     ) -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>>
@@ -111,28 +118,44 @@ impl Args {
             fallible: false
         }
     }
+
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    unsafe fn next_back_unchecked(&mut self) -> CStr<'static> {
+        // SAFETY: we just checked that `self.end - n` is in bounds
+        self.end = self.end.sub(1);
+        assume!(!self.end.is_null() && self.end > self.cur);
+
+        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
+        CStr::from_ptr(self.end.read())
+    }
+
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    unsafe fn next_unchecked(&mut self) -> CStr<'static> {
+        let p = self.cur;
+        self.cur = self.cur.add(1);
+        assume!(!p.is_null() && p < self.end);
+
+        CStr::from_ptr(p.read())
+    }
 }
 
 // most of these are copied or slightly adapted from slice::Iter
 impl Iterator for Args {
     type Item = CStr<'static>;
 
-    // TODO: it might be better to have next delegate nth(0) instead of nth delegating to next
-    //  good.
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn next(&mut self) -> Option<CStr<'static>> {
         if self.cur == self.end {
             return None;
         }
-        assume!(!self.cur.is_null() && self.cur < self.end);
+        assume!(self.cur < self.end);
 
-        // SAFETY: we just checked that `self.cur + n` is in bounds
-        let p = self.cur;
-        self.cur = unsafe { self.cur.add(1) };
-
-        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-        Some(unsafe { CStr::from_ptr(p.read()) })
+        // SAFETY: we just checked that `self.cur < self.end`, the pointer is from argv, which
+        // always contains valid pointers to cstrs
+        Some(unsafe { self.next_unchecked() })
     }
 
     #[allow(clippy::inline_always)]
@@ -149,7 +172,20 @@ impl Iterator for Args {
 
     #[inline]
     fn last(mut self) -> Option<CStr<'static>> {
-        self.next_back()
+        #[cfg(feature = "rev_iter")]
+        {
+            self.next_back()
+        }
+        #[cfg(not(feature = "rev_iter"))]
+        {
+            if self.cur == self.end {
+                return None;
+            }
+
+            // SAFETY: we just checked that `self.cur < self.end`, the pointer is from argv, which
+            //  always contains valid pointers to cstrs
+            Some(unsafe { self.next_back_unchecked() })
+        }
     }
 
     #[inline]
@@ -159,10 +195,13 @@ impl Iterator for Args {
             return None;
         }
 
+        // SAFETY: we just checked that `self.cur + n` is in bounds
         self.cur = unsafe { self.cur.add(n) };
-        assume!(!self.cur.is_null() && self.cur < self.end);
+        assume!(self.cur < self.end);
 
-        self.next()
+        // SAFETY: we just checked that `self.cur < self.end`, the pointer is from argv, which
+        // always contains valid pointers to cstrs
+        Some(unsafe { self.next_unchecked() })
     }
 
     #[inline]
@@ -170,6 +209,7 @@ impl Iterator for Args {
         if self.cur == self.end {
             return acc;
         }
+
         loop {
             assume!(!self.cur.is_null() && self.cur < self.end);
             acc = f(acc, unsafe { CStr::from_ptr(self.cur.read()) });
@@ -179,10 +219,12 @@ impl Iterator for Args {
                 break;
             }
         }
+
         acc
     }
 }
 
+#[cfg(feature = "rev_iter")]
 impl DoubleEndedIterator for Args {
     #[inline]
     fn next_back(&mut self) -> Option<CStr<'static>> {
@@ -190,12 +232,9 @@ impl DoubleEndedIterator for Args {
             return None;
         }
 
-        // SAFETY: we just checked that `self.end - n` is in bounds
-        self.end = unsafe { self.end.sub(1) };
-        assume!(!self.end.is_null() && self.end > self.cur);
-
-        // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-        Some(unsafe { CStr::from_ptr(self.end.read()) })
+        // SAFETY: we just checked that `self.cur < self.end`, the pointer is from argv, which
+        //  always contains valid pointers to cstrs
+        Some(unsafe { self.next_back_unchecked() })
     }
 
     #[inline]
@@ -208,7 +247,9 @@ impl DoubleEndedIterator for Args {
         self.end = unsafe { self.end.sub(n) };
         assume!(!self.end.is_null() && self.end > self.cur);
 
-        self.next_back()
+        // SAFETY: we just checked that `self.cur < self.end`, the pointer is from argv, which
+        //  always contains valid pointers to cstrs
+        Some(unsafe { self.next_back_unchecked() })
     }
 
     #[inline]
@@ -217,7 +258,6 @@ impl DoubleEndedIterator for Args {
             return acc;
         }
 
-        // TODO: try to make this loop do-while shaped
         loop {
             // SAFETY: we just checked that `self.end > self.cur` in the last loop
             self.end = unsafe { self.end.sub(1) };

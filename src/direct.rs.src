@@ -1,6 +1,3 @@
-//! Direct, platform-specific access to `argc` and `argv`.
-//! Most users should prefer the higher-level iterators in the crate root.
-
 // noinspection DuplicatedCode
 /// Returns `(argc, argv)`, where `argc` is the number of arguments and `argv` is a pointer to an
 /// array of pointers to null-terminated strings (the program arguments).

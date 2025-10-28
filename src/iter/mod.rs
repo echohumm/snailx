@@ -1,4 +1,4 @@
-// TODO: try to implement try_fold/_rfold for both
+// TODO: try to implement try_fold/_rfold for both, reduce copies/ops in general
 
 pub mod args;
 pub mod mapped_args;

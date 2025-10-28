@@ -2,26 +2,53 @@
 
 import! {
     {
-        iter::{DoubleEndedIterator, Iterator},
+        iter::{Iterator, FusedIterator},
         ops::{Fn, FnMut},
         option::Option::{self, None, Some}
     }
 }
-use {super::helpers::len, CStr, cmdline::helpers, direct};
 
+#[cfg(feature = "rev_iter")]
+import! {
+    iter::DoubleEndedIterator
+}
+
+use {
+    super::{args::Args, helpers::len},
+    cmdline::helpers,
+    direct
+};
 // TODO: may be better to not implement certain things manually and just delegate to fold
 
-// /// This enum is used to determine what to do when an argument fails to parse.
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-// #[repr(u8)]
-// pub enum Recovery {
-//     /// Return the contained string.
-//     Yield(&'static str),
-//     /// Skip the argument, returning the next valid argument or `None` if there are no more.
-//     Skip,
-//     /// Just return `None`.
-//     YieldNone
-// }
+macro_rules! fallible_q {
+    ($self:ident, $f:expr, $i:expr) => {
+        #[cfg(not(feature = "infallible_map"))]
+        $f
+        #[cfg(feature = "infallible_map")]
+        if $self.fallible {
+            $f
+        } else {
+            $i
+        }
+    };
+}
+
+macro_rules! next_back {
+    ($self:ident) => {{
+        while $self.cur != $self.end {
+            // SAFETY: we just checked that `$self.cur < $self.end`
+            $self.end = unsafe { $self.end.sub(1) };
+
+            assume!(!$self.end.is_null() && $self.end > $self.cur);
+
+            if let Some(v) = ($self.map)(unsafe { $self.end.read() }) {
+                return Some(v);
+            }
+        }
+
+        None
+    }};
+}
 
 // not Copy for consistency with Args
 /// An iterator that maps each argument using a user-provided function. If the mapping returns
@@ -39,8 +66,6 @@ impl MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
     /// Returns an iterator over the program's arguments as `&'static str`. Non-UTF-8 arguments are
     /// skipped.
     #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
         MappedArgs::new(helpers::try_to_str)
@@ -52,8 +77,6 @@ impl MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::s
     /// Returns an iterator over the program's arguments as `&'static std::ffi::OsStr`. Requires the
     /// `std` feature.
     #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn osstr()
     -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>>
@@ -64,7 +87,8 @@ impl MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::s
         }
         #[cfg(feature = "infallible_map")]
         {
-            MappedArgs::new_infallible(helpers::to_osstr)
+            // SAFETY: to_osstr only returns Some
+            unsafe { MappedArgs::new_infallible(helpers::to_osstr) }
         }
     }
 }
@@ -77,8 +101,6 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> MappedArgs<Ret, F> {
     /// The mapping function is assumed to be fallible, so `size_hint()` will return
     /// `(0, Some(len))`.
     #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
     pub fn new(map: F) -> MappedArgs<Ret, F> {
         let (argc, argv) = direct::argc_argv();
@@ -97,35 +119,31 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> MappedArgs<Ret, F> {
     /// The mapping function is assumed to be infallible, so `size_hint()` will return
     /// `(len, Some(len))`.
     ///
-    /// `map` should never return `None`, but in the case that it does, it will be skipped.
+    /// # Safety
+    ///
+    /// `map` must never return `None`.
     #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
-    pub fn new_infallible(map: F) -> MappedArgs<Ret, F> {
+    pub unsafe fn new_infallible(map: F) -> MappedArgs<Ret, F> {
         let (argc, argv) = direct::argc_argv();
         MappedArgs { cur: argv, end: helpers::back(argv, argc), map, fallible: false }
     }
 
-    /// Gets the remaining arguments in this iterator as a slice.
+    /// Converts this mapped iterator to an [`Args`] instance. Like [`Args::new`], but operates on
+    /// an existing mapped iterator.
     #[must_use]
-    #[inline]
-    pub fn as_slice(&self) -> &'static [CStr<'static>] {
-        unsafe {
-            switch!(core::slice::from_raw_parts(
-                self.cur.cast::<CStr<'static>>(),
-                len(self.cur, self.end)
-            ))
-        }
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn unmap(self) -> Args {
+        Args { cur: self.cur, end: self.end }
     }
+
+    // as_slice removed as it was pretty useless
 
     /// Gets the remaining length of items in this iterator.
     ///
     /// Returns `None` if `infallible_map` is disabled or this iterator's mapping function is marked
     /// as fallible. If `infallible_map` is enabled and this iterator is marked as infallible,
     /// returns `Some(len)`.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     pub fn len(&self) -> Option<usize> {
         #[cfg(not(feature = "infallible_map"))]
         {
@@ -146,8 +164,6 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn next(&mut self) -> Option<Ret> {
-        let mut ret = None;
-
         while self.cur != self.end {
             // SAFETY: we just checked that `self.cur + n` is in bounds
             let p = self.cur;
@@ -156,12 +172,11 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
 
             // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
             if let Some(v) = (self.map)(unsafe { p.read() }) {
-                ret = Some(v);
-                break;
+                return Some(v);
             }
         }
 
-        ret
+        None
     }
 
     /// Returns the bounds on the remaining length of the iterator.
@@ -203,11 +218,16 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
 
     #[inline]
     fn last(mut self) -> Option<Ret> {
-        self.next_back()
+        #[cfg(feature = "rev_iter")]
+        {
+            self.next_back()
+        }
+        #[cfg(not(feature = "rev_iter"))]
+        {
+            next_back!(self)
+        }
     }
 
-    // FIXME: this is wrong as it assumes that the iterator is infallible; higher indexes on a
-    // fallible iterator may  cause UB
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Ret> {
         // SAFETY: the pointers are guaranteed to be valid for len() as they are from argv
@@ -216,12 +236,36 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
             return None;
         }
 
-        // TODO: instead of just a raw add n, make it n *valid* elements
-        // SAFETY: we just checked that `self.cur + n` is in bounds
-        self.cur = unsafe { self.cur.add(n) };
-        assume!(!self.cur.is_null() && self.cur < self.end);
+        fallible_q!(
+            self,
+            {
+                let mut i = 0;
+                while self.cur != self.end {
+                    let p = self.cur;
+                    // SAFETY: we just checked that `self.cur < self.end`
+                    self.cur = unsafe { self.cur.add(1) };
+                    assume!(!p.is_null() && p < self.end);
 
-        self.next()
+                    // SAFETY: the pointer is from argv, which always contains valid pointers to
+                    // cstrs
+                    if let Some(v) = (self.map)(unsafe { p.read() }) {
+                        if i == n {
+                            return Some(v);
+                        }
+                        i += 1;
+                    }
+                }
+            },
+            {
+                // SAFETY: we just checked that `self.cur + n` is in bounds
+                self.cur = unsafe { self.cur.add(n) };
+                assume!(!self.cur.is_null() && self.cur < self.end);
+
+                return self.next();
+            }
+        );
+
+        None
     }
 
     #[inline]
@@ -232,26 +276,14 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
 
         loop {
             assume!(!self.cur.is_null() && self.cur < self.end);
-            // SAFETY: we just checked that `self.cur` is in bounds
-            let p = self.cur;
-            self.cur = unsafe { self.cur.add(1) };
-
-            #[cfg(not(feature = "infallible_map"))]
-            {
-                // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-                if let Some(v) = (self.map)(unsafe { p.read() }) {
-                    acc = f(acc, v);
-                }
-            }
-            #[cfg(feature = "infallible_map")]
-            {
-                if self.fallible {
-                    // SAFETY: the pointer is from argv, which always contains valid pointers to
-                    //  cstrs
-                    if let Some(v) = (self.map)(unsafe { p.read() }) {
+            fallible_q!(
+                self,
+                {
+                    if let Some(v) = (self.map)(unsafe { self.cur.read() }) {
                         acc = f(acc, v);
                     }
-                } else {
+                },
+                {
                     // SAFETY: caller guarantees that the map is infallible
                     acc = f(
                         acc,
@@ -259,13 +291,15 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
                             car,
                             Some,
                             e,
-                            unsafe { (self.map)(p.read()) },
+                            unsafe { (self.map)(self.cur.read()) },
                             "map is infallible, but returned None"
                         )
                     );
                 }
-            }
+            );
 
+            // SAFETY: we just checked that `self.cur` is in bounds
+            self.cur = unsafe { self.cur.add(1) };
             if self.cur == self.end {
                 break;
             }
@@ -274,24 +308,11 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     }
 }
 
+#[cfg(feature = "rev_iter")]
 impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Ret, F> {
     #[inline]
     fn next_back(&mut self) -> Option<Ret> {
-        let mut ret = None;
-
-        while self.cur != self.end {
-            // SAFETY: we just checked that `self.cur < self.end`
-            self.end = unsafe { self.end.sub(1) };
-
-            assume!(!self.end.is_null() && self.end > self.cur);
-
-            if let Some(v) = (self.map)(unsafe { self.end.read() }) {
-                ret = Some(v);
-                break;
-            }
-        }
-
-        ret
+        next_back!(self)
     }
 
     #[inline]
@@ -301,10 +322,31 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
             return None;
         }
 
-        self.end = unsafe { self.end.sub(n) };
-        assume!(!self.end.is_null() && self.end > self.cur);
+        fallible_q!(
+            self,
+            {
+                let mut i = 0;
+                while self.cur != self.end {
+                    self.end = unsafe { self.end.sub(1) };
+                    assume!(!self.end.is_null() && self.end > self.cur);
 
-        self.next_back()
+                    if let Some(v) = (self.map)(unsafe { self.end.read() }) {
+                        if i == n {
+                            return Some(v);
+                        }
+                        i += 1;
+                    }
+                }
+            },
+            {
+                self.end = unsafe { self.end.sub(n) };
+                assume!(!self.end.is_null() && self.end > self.cur);
+
+                return self.next_back();
+            }
+        );
+
+        None
     }
 
     #[inline]
@@ -356,6 +398,8 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
     }
 }
 
+impl<Ret, F: Fn(*const u8) -> Option<Ret>> FusedIterator for MappedArgs<Ret, F> {}
+
 // removed as i realized neither of these fit the functionality of MappedArgs
 //
 // impl<Ret, F: Fn(*const u8) -> Option<Ret>> ExactSizeIterator
@@ -367,5 +411,3 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
 //         len(self.cur, self.end)
 //     }
 // }
-// impl<Ret, F: Fn(*const u8) -> Option<Ret>> FusedIterator for MappedArgs<Ret, F>
-// {}

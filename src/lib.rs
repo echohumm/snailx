@@ -20,6 +20,12 @@
 #![deny(missing_docs)]
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
+#[cfg(feature = "alloc")] extern crate alloc;
+#[cfg(feature = "hashbrown")] extern crate hashbrown;
+
+#[cfg(not(any(unix, target_vendor = "apple")))]
+compile_error!("snailx only supports Unix and macOS");
+
 macro_rules! import {
     ($($v:tt)*) => {
         #[cfg(feature = "std")]
@@ -82,13 +88,10 @@ macro_rules! assume {
 
     // carry out
     (car, $exp:ident, $in_name:ident, $e:expr, $($msg:tt)+) => {
-        if let $exp($in_name) = $e {
-            $in_name
-        } else {
+        match $e {
+            $exp($in_name) => $in_name,
             #[allow(unused_unsafe)]
-            unsafe {
-                switch!(core::hint::unreachable_unchecked(););
-            }
+            _ => unsafe { switch!(core::hint::unreachable_unchecked();) },
         }
     };
 
@@ -114,6 +117,11 @@ mod ffi;
 
 mod cmdline;
 mod iter;
+
+#[cfg(any(feature = "indexing_parser", feature = "non_indexing_parser"))] mod parser;
+
+#[cfg(feature = "indexing_parser")] pub use parser::indexing as indexing_parser;
+#[cfg(feature = "non_indexing_parser")] pub use parser::non_indexing as non_indexing_parser;
 
 #[cfg(any(debug_assertions, not(feature = "assume_valid_str")))] mod str_checks;
 
