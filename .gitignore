@@ -1,5 +1,5 @@
 target
 Cargo.lock
-src/main.rs
+# idk why main.rs was excluded
 CONTRIBUTING.md
-generated
+generated/

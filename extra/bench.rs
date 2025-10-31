@@ -552,7 +552,7 @@ fn bench_fold_snailx_vs_std(c: &mut Criterion) {
             BatchSize::SmallInput
         );
     });
-    
+
     group.bench_function("std_string", |b| {
         b.iter_batched_ref(
             std::env::args,
@@ -906,6 +906,218 @@ fn bench_snailx_helpers(c: &mut Criterion) {
     group.finish();
 }
 
+// Additional argv preset with long options to exercise IndexingParser long handling
+#[cfg(feature = "indexing_parser")]
+const ARGV_PRESET_LONG: [*const u8; 59] = [
+    b"prog\0".as_ptr(),
+    b"--num\0".as_ptr(),
+    b"10\0".as_ptr(),
+    b"--alpha\0".as_ptr(),
+    b"--beta\0".as_ptr(),
+    b"--gamma\0".as_ptr(),
+    b"1\0".as_ptr(),
+    b"2\0".as_ptr(),
+    b"--delta\0".as_ptr(),
+    b"3\0".as_ptr(),
+    b"--epsilon\0".as_ptr(),
+    b"--zeta\0".as_ptr(),
+    b"--eta\0".as_ptr(),
+    b"--theta\0".as_ptr(),
+    b"--iota\0".as_ptr(),
+    b"--kappa\0".as_ptr(),
+    b"--lambda\0".as_ptr(),
+    b"--mu\0".as_ptr(),
+    b"--nu\0".as_ptr(),
+    b"--xi\0".as_ptr(),
+    b"--omicron\0".as_ptr(),
+    b"--pi\0".as_ptr(),
+    b"--rho\0".as_ptr(),
+    b"--sigma\0".as_ptr(),
+    b"--tau\0".as_ptr(),
+    b"--limit\0".as_ptr(),
+    b"42\0".as_ptr(),
+    b"--path\0".as_ptr(),
+    b"/tmp\0".as_ptr(),
+    b"file1\0".as_ptr(),
+    b"file2\0".as_ptr(),
+    b"file3\0".as_ptr(),
+    b"pos1\0".as_ptr(),
+    b"pos2\0".as_ptr(),
+    b"pos3\0".as_ptr(),
+    b"--user\0".as_ptr(),
+    b"alice\0".as_ptr(),
+    b"--group\0".as_ptr(),
+    b"staff\0".as_ptr(),
+    b"--level\0".as_ptr(),
+    b"7\0".as_ptr(),
+    b"--dry-run\0".as_ptr(),
+    b"--verbose\0".as_ptr(),
+    b"--mode\0".as_ptr(),
+    b"fast\0".as_ptr(),
+    b"--retry\0".as_ptr(),
+    b"3\0".as_ptr(),
+    b"--timeout\0".as_ptr(),
+    b"1000\0".as_ptr(),
+    b"--output\0".as_ptr(),
+    b"out.txt\0".as_ptr(),
+    b"--config\0".as_ptr(),
+    b"conf.toml\0".as_ptr(),
+    b"--threads\0".as_ptr(),
+    b"8\0".as_ptr(),
+    b"--seed\0".as_ptr(),
+    b"12345\0".as_ptr(),
+    b"pos4\0".as_ptr(),
+    b"pos5\0".as_ptr()
+];
+
+#[cfg(feature = "indexing_parser")]
+const RULES: &[snailx::indexing_parser::OptRule; 20] = &[
+    snailx::indexing_parser::OptRule::new_auto_long("num").set_val_count(1),
+    snailx::indexing_parser::OptRule::new_auto_long("alpha"),
+    snailx::indexing_parser::OptRule::new_auto_long("beta"),
+    snailx::indexing_parser::OptRule::new_auto_long("gamma").set_val_count(2),
+    snailx::indexing_parser::OptRule::new_auto_long("delta").set_val_count(1),
+    snailx::indexing_parser::OptRule::new_auto_long("epsilon"),
+    snailx::indexing_parser::OptRule::new_auto_long("zeta"),
+    snailx::indexing_parser::OptRule::new_auto_long("eta"),
+    snailx::indexing_parser::OptRule::new_auto_long("theta"),
+    snailx::indexing_parser::OptRule::new_auto_long("iota"),
+    snailx::indexing_parser::OptRule::new_auto_long("kappa"),
+    snailx::indexing_parser::OptRule::new_auto_long("lambda"),
+    snailx::indexing_parser::OptRule::new_auto_long("mu"),
+    snailx::indexing_parser::OptRule::new_auto_long("nu"),
+    snailx::indexing_parser::OptRule::new_auto_long("xi"),
+    snailx::indexing_parser::OptRule::new_auto_long("omicron"),
+    snailx::indexing_parser::OptRule::new_auto_long("pi"),
+    snailx::indexing_parser::OptRule::new_auto_long("rho"),
+    snailx::indexing_parser::OptRule::new_auto_long("sigma"),
+    snailx::indexing_parser::OptRule::new_auto_long("tau")
+];
+
+#[cfg(feature = "indexing_parser")]
+fn bench_indexing_parser_minimal(c: &mut Criterion) {
+    unsafe { snailx::direct::set_argc_argv(ARGV_MINIMAL.len() as u32, ARGV_MINIMAL.as_ptr()) };
+
+    let mut group = c.benchmark_group("indexing_parser/minimal");
+
+    group.bench_function("parse_only", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p)
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("parse_and_query", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p.positional(0));
+                black_box(p.flag("alpha"));
+                black_box(p.flag("beta"));
+                if let Some(it) = p.option("num") {
+                    let _ = black_box(black_box(it).next());
+                }
+                if let Some(it2) = p.option("gamma") {
+                    let _ = black_box(black_box(it2).nth(1));
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "indexing_parser")]
+fn bench_indexing_parser_preset_cmdline(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(
+            ARGV_PRESET_CMDLINE.len() as u32,
+            ARGV_PRESET_CMDLINE.as_ptr()
+        )
+    };
+
+    let mut group = c.benchmark_group("indexing_parser/preset_cmdline");
+
+    group.bench_function("parse_only", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p)
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("parse_and_query", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p.positional(0));
+                black_box(p.flag("alpha"));
+                black_box(p.flag("beta"));
+                if let Some(it) = p.option("num") {
+                    let _ = black_box(black_box(it).next());
+                }
+                if let Some(it2) = p.option("gamma") {
+                    let _ = black_box(black_box(it2).nth(1));
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "indexing_parser")]
+fn bench_indexing_parser_long(c: &mut Criterion) {
+    unsafe {
+        snailx::direct::set_argc_argv(ARGV_PRESET_LONG.len() as u32, ARGV_PRESET_LONG.as_ptr())
+    };
+
+    let mut group = c.benchmark_group("indexing_parser/long");
+
+    group.bench_function("parse_only", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p)
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.bench_function("parse_and_query", |b| {
+        b.iter_batched(
+            snailx::indexing_parser::IndexingParser::new,
+            |mut p| {
+                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                black_box(p.positional(0));
+                black_box(p.flag("alpha"));
+                black_box(p.flag("beta"));
+                if let Some(it) = p.option("num") {
+                    let _ = black_box(black_box(it).next());
+                }
+                if let Some(it2) = p.option("gamma") {
+                    let _ = black_box(black_box(it2).nth(1));
+                }
+            },
+            BatchSize::SmallInput
+        );
+    });
+
+    group.finish();
+}
+
 pub fn bench(c: &mut Criterion) {
     bench_snailx_iter_minimal(c);
     #[cfg(feature = "rev_iter")]
@@ -943,6 +1155,13 @@ pub fn bench(c: &mut Criterion) {
     bench_snailx_fold_preset(c);
     #[cfg(feature = "rev_iter")]
     bench_snailx_rfold_preset(c);
+
+    #[cfg(feature = "indexing_parser")]
+    {
+        bench_indexing_parser_minimal(c);
+        bench_indexing_parser_preset_cmdline(c);
+        bench_indexing_parser_long(c);
+    }
 
     bench_snailx_helpers(c);
 }

@@ -69,14 +69,14 @@ pub(crate) mod helpers {
     #[inline(always)]
     #[cfg_attr(not(feature = "no_cold"), cold)]
     pub(crate) fn back(argv: *const *const u8, argc: u32) -> *const *const u8 {
-        assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
+        assume!(!argv.is_null(), "argv is null");
         // SAFETY: argv points to a valid slice of argc count pointers, this is one past the last
         // but always decremented before deref
         unsafe { argv.add(argc as usize) }
     }
 
     // pub fn front(argv: *const *const u8, argc: u32) -> *const *const u8 {
-    //     assume!(!argv.is_null() || argc == 0, "argc is nonzero but argv is null");
+    //     assume!(!argv.is_null(), "argv is null");
     //
     //     if argc == 0 {
     //         return argv;

@@ -8,6 +8,7 @@
       <w>multiflag</w>
       <w>nuttx</w>
       <w>osstring</w>
+      <w>positionals</w>
       <w>rustversion</w>
       <w>snailx</w>
       <w>uclibc</w>

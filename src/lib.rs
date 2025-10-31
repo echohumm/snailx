@@ -21,7 +21,6 @@
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
 #[cfg(feature = "alloc")] extern crate alloc;
-#[cfg(feature = "hashbrown")] extern crate hashbrown;
 
 #[cfg(not(any(unix, target_vendor = "apple")))]
 compile_error!("snailx only supports Unix and macOS");

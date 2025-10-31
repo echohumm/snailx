@@ -4,16 +4,12 @@ extern crate core;
 extern crate snailx;
 
 use {
-    core::{
-        hint::spin_loop,
-        sync::atomic::{AtomicBool, Ordering}
-    },
     snailx::{CStr, bench_helpers::strlen}
 };
 
 // used as it is a documented safety condition (which tests decide to violate by default) that
 //  `set_argc_argv()` is called while there is no other concurrent access.
-static GLOBAL_LOCK: AtomicBool = AtomicBool::new(false);
+static GLOBAL_LOCK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 const ARG_SET_0: [*const u8; 0] = [];
 
@@ -127,15 +123,15 @@ macro_rules! test_i {
         struct PanicHandler {}
         impl PanicHandler {
             fn new() -> PanicHandler {
-                while GLOBAL_LOCK.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    spin_loop();
+                while GLOBAL_LOCK.compare_exchange(false, true, core::sync::atomic::Ordering::SeqCst, core::sync::atomic::Ordering::SeqCst).is_err() {
+                    core::hint::spin_loop();
                 }
                 PanicHandler {}
             }
         }
         impl Drop for PanicHandler {
             fn drop(&mut self) {
-                GLOBAL_LOCK.store(false, Ordering::SeqCst);
+                GLOBAL_LOCK.store(false, core::sync::atomic::Ordering::SeqCst);
             }
         }
 

@@ -13,7 +13,7 @@ keywords = ["argv", "arguments", "cli", "no_std", "zero-allocation"]
 categories = ["command-line-interface", "no-std::no-alloc", "os::unix-apis"]
 readme = "README.md"
 build = "build.rs"
-exclude = ["/src/main.rs", "/extra/"]
+exclude = ["/src/main.rs", "/extra/", "generated/"]
 
 [package.metadata.docs.rs]
 features = ["std", "to_core_cstr"]
@@ -49,6 +49,8 @@ __worst_bench = ["__bench"]
 ## for access to helpers to benchmark them
 __bench = []
 
+default = []
+
 # actual features
 ## enables osstr functions and snailx::CStr::to_stdlib
 std = []
@@ -67,7 +69,9 @@ rev_iter = []
 ## allows the use of the rust alloc crate
 alloc = []
 non_indexing_parser = []
-indexing_parser = ["alloc", "hashbrown"]
+indexing_parser = ["alloc", "std"]
+
+full = ["std", "infallible_map", "rev_iter"]
 
 # TODO: split below targets into multiple files
 
@@ -81,9 +85,6 @@ indexing_parser = ["alloc", "hashbrown"]
 #
 #[dev-dependencies]
 #criterion = "0.7.0"
-
-[dependencies]
-hashbrown = { version = "^0.6.0", optional = true }
 
 [[test]]
 name = "tests_gen"
