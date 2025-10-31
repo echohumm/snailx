@@ -1,5 +1,7 @@
 # snailx
 
+[//]: # (TODO: parser docs and stuff)
+
 ## General information
 
 - MSRV: 1.48.0
