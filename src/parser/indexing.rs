@@ -103,7 +103,9 @@ impl IndexingParser {
 
                 if i < len {
                     let i = i + 1;
-                    next = Some(tri!(str:i CStr::from_ptr(current_raw.add(1).read()).to_stdlib().to_str()));
+                    next = Some(
+                        tri!(str:i CStr::from_ptr(current_raw.add(1).read()).to_stdlib().to_str())
+                    );
                 }
 
                 if i == 0 && is_first_prog(str) {
@@ -580,11 +582,7 @@ impl Argument {
         if val.is_null() {
             Argument::ProgFlagOrPos(opt)
         } else {
-            Argument::Opt {
-                opt,
-                val,
-                val_offset
-            }
+            Argument::Opt { opt, val, val_offset }
         }
     }
 

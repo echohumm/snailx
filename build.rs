@@ -4,9 +4,9 @@ use std::{
     env::{self, current_dir},
     ffi::OsString,
     fs::{create_dir_all, read_to_string, write},
+    path::PathBuf,
     process::{Command, exit}
 };
-use std::path::PathBuf;
 
 #[cfg(not(any(unix, target_vendor = "apple")))]
 compile_error!("snailx only supports Unix and macOS");
@@ -73,9 +73,7 @@ fn main() {
 
     let src_dir = cwd.join("src");
 
-    let out_dir = env::var_os("OUT_DIR")
-        .map(PathBuf::from)
-        .expect("OUT_DIR not set by Cargo");
+    let out_dir = env::var_os("OUT_DIR").map(PathBuf::from).expect("OUT_DIR not set by Cargo");
     if !out_dir.exists() {
         create_dir_all(&out_dir).expect("failed to ensure OUT_DIR exists");
     }

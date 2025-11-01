@@ -43,6 +43,13 @@ pub mod minimal_cstr {
         _marker: PhantomData<&'a [c_char]>
     }
 
+    #[cfg(feature = "to_core_cstr")]
+    /// Alias for stdlib's CStr.
+    pub type StdCStr = core::ffi::CStr;
+    #[cfg(all(not(feature = "to_core_cstr"), feature = "std"))]
+    /// Alias for stdlib's CStr.
+    pub type StdCStr = ::std::ffi::CStr;
+
     impl PartialEq<*const u8> for CStr<'_> {
         #[allow(clippy::inline_always)]
         #[inline(always)]
