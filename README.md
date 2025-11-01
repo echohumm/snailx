@@ -181,6 +181,8 @@ fn main() {
         for i in 0..num {
             println!("{}", i);
         }
+    } else {
+        eprintln!("You must specify the value of `number`!");
     }
 }
 ```
