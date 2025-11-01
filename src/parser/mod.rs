@@ -9,7 +9,7 @@ pub mod non_indexing;
 // pub trait Parser {
 //     #[must_use]
 //     fn positional(&self, idx: usize) -> Option<&'static str>;
-//     
+//
 //     #[must_use]
 //     fn flag(&self, name: &'static str) -> bool;
 //

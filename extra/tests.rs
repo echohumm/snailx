@@ -3,9 +3,7 @@
 extern crate core;
 extern crate snailx;
 
-use {
-    snailx::{CStr, bench_helpers::strlen}
-};
+use snailx::{CStr, bench_helpers::strlen};
 
 // used as it is a documented safety condition (which tests decide to violate by default) that
 //  `set_argc_argv()` is called while there is no other concurrent access.

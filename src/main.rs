@@ -168,55 +168,36 @@ fn main() {
 
         let rules = &[
             OptRule::new("greet").set_long("greet").set_short('g'),
-            OptRule::new("number")
-                .set_long("number")
-                .set_short('n')
-                .set_val_count(1)
+            OptRule::new("number").set_long("number").set_short('n').set_val_count(1)
         ];
 
         let mut args = IndexingParser::new();
         println!("Unparsed: {:?}\n", args);
-        args.parse(
-            rules,
-            |_| true
-        )
-        .expect("failed to parse");
+        args.parse(rules, |_| true).expect("failed to parse");
         println!("Parsed: {:?}\n", args);
         println!("Parsed pretty: {:#?}\n", args);
 
-        const NUM: [*const u8; 1] = [
-            "-n\0".as_ptr(),
-        ];
+        const NUM: [*const u8; 1] = ["-n\0".as_ptr()];
 
         args.reset();
         unsafe {
             set_argc_argv(1, NUM.as_ptr());
         }
-        args.parse(
-            rules,
-            |_| false
-        ).expect("failed to parse");
+        args.parse(rules, |_| false).expect("failed to parse");
 
         println!("Parsed (incomplete n): {:?}\n", args);
         println!("Parsed pretty (incomplete n): {:#?}\n", args);
 
-        const NUM_FULL: [*const u8; 2] = [
-            "-n\0".as_ptr(),
-            "10\0".as_ptr(),
-        ];
+        const NUM_FULL: [*const u8; 2] = ["-n\0".as_ptr(), "10\0".as_ptr()];
 
         args.reset();
         unsafe {
             set_argc_argv(2, NUM_FULL.as_ptr());
         }
-        args.parse(
-            rules,
-            |_| false
-        ).expect("failed to parse");
+        args.parse(rules, |_| false).expect("failed to parse");
 
         println!("Parsed (full n): {:?}\n", args);
         println!("Parsed pretty (full n): {:#?}\n", args);
-
     }
 
     // CLI: [reps] [arg_count]
