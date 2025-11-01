@@ -5,6 +5,7 @@ use {
         collections::BTreeMap,
         fmt::{Debug, Formatter, Result as FmtRes},
         iter::Iterator,
+        marker::Copy,
         mem::transmute,
         ops::Fn,
         option::Option::{self, None, Some},
@@ -37,12 +38,19 @@ fn null_slice() -> *const [*const u8] {
 // indicator of the start of a short, two for a long argument
 const INDICATOR: char = '-';
 
+/// A parser that indexes program arguments for named access.
+///
+/// Parses once and stores results for fast lookup. Allocates per argument.
+/// Estimated allocation is ~90 bytes per argument.
 pub struct IndexingParser {
     index: BTreeMap<Ident, Argument>,
     positionals: usize
 }
 
 impl IndexingParser {
+    /// Creates a new `IndexingParser`.
+    ///
+    /// Does not parse arguments. Call [`parse`] before accessing results.
     #[allow(clippy::new_without_default, clippy::inline_always)]
     #[must_use]
     #[inline(always)]
@@ -50,14 +58,22 @@ impl IndexingParser {
         IndexingParser { index: BTreeMap::new(), positionals: 0 }
     }
 
+    /// Clear parsed index and reset parser state.
     pub fn reset(&mut self) {
         self.index.clear();
     }
 
+    /// Parses program arguments using the provided rules.
+    ///
+    /// - `rules`: slice of `OptRule` that describe recognized options.
+    /// - `is_first_prog`: callback that identifies the program executable in the first arg.
+    ///
+    /// Returns `Ok(())` on success.
+    /// Returns `Err(ParseError::InvalidStr)` if any argument contains invalid UTF-8.
     pub fn parse(
         &mut self,
         rules: &[OptRule],
-        is_first_progname: impl Fn(&'static str) -> bool
+        is_first_prog: impl Fn(&'static str) -> bool
     ) -> Result<(), ParseError> {
         if !self.index.is_empty() {
             // already parsed
@@ -88,7 +104,7 @@ impl IndexingParser {
                     next = Some(tri!(str:i CStr::from_ptr(current).to_stdlib().to_str()))
                 }
 
-                if i == 0 && is_first_progname(str) {
+                if i == 0 && is_first_prog(str) {
                     self.index.insert(Ident::__Prog, Argument::ProgFlagOrPos(str));
                 } else if end_of_args {
                     self.push_positional(&mut positionals, str);
@@ -129,15 +145,31 @@ impl IndexingParser {
 
     // accessors
 
+    /// Returns program name if detected by `is_first_prog` during `parse`.
+    /// Otherwise `None`.
     #[must_use]
     #[inline]
-    pub fn positional(&self, idx: usize) -> Option<&'static str> {
-        if idx >= self.positionals {
+    pub fn prog_name(&self) -> Option<&'static str> {
+        self.index.get(&Ident::__Prog).map(Argument::opt)
+    }
+
+    /// Returns number of positional arguments parsed.
+    #[must_use]
+    #[inline]
+    pub const fn positional_count(&self) -> usize {
+        self.positionals
+    }
+
+    /// Returns the `n`th positional argument, or `None` if it does not exist.
+    #[must_use]
+    #[inline]
+    pub fn positional(&self, n: usize) -> Option<&'static str> {
+        if n >= self.positionals {
             return None;
         }
         for (id, arg) in &self.index {
             match id {
-                Ident::Positional(n) if *n == idx => {
+                Ident::Positional(p_n) if *p_n == n => {
                     return Some(arg.opt());
                 }
                 _ => {}
@@ -145,9 +177,11 @@ impl IndexingParser {
         }
         None
     }
+    // TODO: make these part of a trait
 
-    // this does have a small caveat that any option (e.g. -n 100) may be accessible as a flag,
-    //  even though it is clearly an option.
+    /// Returns `true` if an option with `name` was present.
+    ///
+    /// Note: this treats options with attached values as flags.
     #[must_use]
     #[inline]
     pub fn flag(&self, name: &'static str) -> bool {
@@ -162,6 +196,8 @@ impl IndexingParser {
         false
     }
 
+    /// Returns an iterator over values for `name`.
+    /// Returns `None` if the option was not specified or has no values.
     #[must_use]
     #[inline]
     pub fn option(&self, name: &'static str) -> Option<OptValues> {
@@ -175,20 +211,6 @@ impl IndexingParser {
                         end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
                         offset: arg.val_offset().unwrap_or(0)
                     });
-                }
-                _ => {}
-            }
-        }
-        None
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn option_ptrs(&self, name: &'static str) -> Option<&'static [CStr<'static>]> {
-        for (id, arg) in &self.index {
-            match id {
-                Ident::Option(rule_name) if *rule_name == name => {
-                    return Some(unsafe { &*(tri!(opt:arg.val()) as *const [CStr<'static>]) });
                 }
                 _ => {}
             }
@@ -272,23 +294,16 @@ impl IndexingParser {
 
     #[inline]
     fn next_is_special(peek: Option<&str>) -> bool {
-        match peek {
-            // no next, can't be special
-            None => false,
-            Some(s) => {
-                let mut chars = s.chars();
-                match (chars.next(), chars.next(), chars.next()) {
-                    // longs are special
-                    (Some('-'), Some('-'), Some(_)) => true,
-                    // eoa is not (TODO: decide whether it should be)
-                    (Some('-'), Some('-'), None) => false,
-                    // shorts and bundles are special
-                    (Some('-'), Some(_), _) => true,
-                    // anything else (including -/stdin shorthand and empty arg) isn't
-                    _ => false
-                }
+        peek.map_or(false, |s| {
+            let mut chars = s.chars();
+            match (chars.next(), chars.next(), chars.next()) {
+                // longs, shorts, and bundles are special
+                (Some('-'), Some('-'), Some(_)) | (Some('-'), Some(_), _) => true,
+                // anything else (including -/stdin shorthand, empty arg, and eoa) isn't
+                // TODO: decide if eoa should be
+                _ => false
             }
-        }
+        })
     }
 
     #[inline]
@@ -311,7 +326,6 @@ impl IndexingParser {
                     return null_slice();
                 }
                 *i += cnt;
-                // TODO: don't count as a value if it's special like another option or something
                 ptr::slice_from_raw_parts(raw.add(1), cnt)
             }
         }
@@ -392,6 +406,12 @@ impl Debug for IndexingParser {
     }
 }
 
+/// A parsing rule that describes one option. This includes the following metadata:
+///
+/// - `name`: internal lookup name.
+/// - `long`: optional long form (for example `verbose`).
+/// - `short`: optional short form (for example `v`).
+/// - `val_count`: number of following values. Zero means this is a flag.
 pub struct OptRule {
     name: &'static str,
     // below are optional, where:
@@ -407,50 +427,105 @@ pub struct OptRule {
 }
 
 impl OptRule {
+    /// Creates an `OptRule` with `name`. No short or long identifier is set.
     #[must_use]
     pub const fn new(name: &'static str) -> OptRule {
         OptRule { name, long: (null(), 0), short: '\0', val_count: 0 }
     }
 
+    /// Creates an `OptRule` whose long identifier equals `name`.
     #[must_use]
     pub const fn new_auto_long(name: &'static str) -> OptRule {
         OptRule { name, long: (name.as_ptr(), name.len()), short: '\0', val_count: 0 }
     }
 
+    /// Creates an `OptRule` with long equal to `name` and short set to the first character of
+    /// `name`.
     #[must_use]
-    pub const unsafe fn new_auto(name: &'static str) -> OptRule {
+    pub const fn new_auto(name: &'static str) -> OptRule {
         OptRule {
             name,
             long: (name.as_ptr(), name.len()),
             // unsafe as this assumes first char is ascii, lazy impl which will be done better later
-            short: *name.as_ptr() as char,
+            short: {
+                const CONT_MASK: u8 = 0b0011_1111;
+
+                #[inline]
+                const fn utf8_acc_cont_byte(ch: u32, byte: u8) -> u32 {
+                    (ch << 6) | (byte & CONT_MASK) as u32
+                }
+
+                #[inline]
+                const fn first_char(bytes: &[u8]) -> u32 {
+                    // Decode UTF-8
+                    let x = bytes[0];
+                    if x < 128 {
+                        return x as u32;
+                    }
+
+                    // Multibyte case follows
+                    // Decode from a byte combination out of: [[[x y] z] w]
+                    // NOTE: Performance is sensitive to the exact formulation here
+                    let init = (x & (0x7F >> 2)) as u32;
+                    let y = bytes[1];
+                    let mut ch = utf8_acc_cont_byte(init, y);
+                    if x >= 0xE0 {
+                        // [[x y z] w] case
+                        // 5th bit in 0xE0 .. 0xEF is always clear, so `init` is still valid
+                        let y_z = utf8_acc_cont_byte((y & CONT_MASK) as u32, bytes[2]);
+                        ch = init << 12 | y_z;
+                        if x >= 0xF0 {
+                            // [x y z w] case
+                            // use only the lower 3 bits of `init`
+                            ch = (init & 7) << 18 | utf8_acc_cont_byte(y_z, bytes[3]);
+                        }
+                    }
+
+                    ch
+                }
+
+                // janky way to get a const-stable transmute in 1.48.0
+                const unsafe fn transmute<Src: Copy, Dst: Copy>(s: Src) -> Dst {
+                    *(&s as *const Src).cast::<Dst>()
+                }
+
+                unsafe {
+                    #[allow(unnecessary_transmutes)]
+                    transmute::<u32, char>(first_char(name.as_bytes()))
+                }
+            },
             val_count: 0
         }
     }
 
+    /// Sets the long identifier.
     #[must_use]
     pub const fn set_long(mut self, long: &'static str) -> OptRule {
         self.long = (long.as_ptr(), long.len());
         self
     }
 
+    /// Sets the short identifier.
     #[must_use]
     pub const fn set_short(mut self, short: char) -> OptRule {
         self.short = short;
         self
     }
 
+    /// Sets the number of values this option accepts.
     #[must_use]
     pub const fn set_val_count(mut self, val_count: usize) -> OptRule {
         self.val_count = val_count;
         self
     }
 
+    /// Returns the rule's internal name.
     #[must_use]
     pub const fn name(&self) -> &'static str {
         self.name
     }
 
+    /// Returns the long identifier, if any.
     #[must_use]
     pub fn long(&self) -> Option<&'static str> {
         if self.long.1 == 0 {
@@ -463,11 +538,13 @@ impl OptRule {
         }
     }
 
+    /// Returns the short identifier, if any.
     #[must_use]
     pub const fn short(&self) -> Option<char> {
         if self.short == '\0' { None } else { Some(self.short) }
     }
 
+    /// Returns how many values this option accepts.
     #[must_use]
     pub const fn val_count(&self) -> usize {
         self.val_count
@@ -475,8 +552,7 @@ impl OptRule {
 }
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Ident {
-    /// The program name.
+enum Ident {
     __Prog,
     Positional(usize),
     Option(&'static str)
@@ -519,10 +595,13 @@ impl Argument {
 }
 
 #[derive(Debug)]
+/// An error which can occur while parsing arguments.
 pub enum ParseError {
+    /// An argument contained invalid UTF-8.
     InvalidStr(usize, Utf8Error)
 }
 
+/// An iterator over the values of an option.
 pub struct OptValues {
     cur: *const *const u8,
     end: *const *const u8,
@@ -545,6 +624,8 @@ impl Iterator for OptValues {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
+        // this is probably cheaper than checking with an if statement whether offset > 0 and using
+        // (1, Some(1)) in that case, so this works.
         let len = unsafe { len(self.cur, self.end) };
         (len, Some(len))
     }

@@ -79,6 +79,8 @@ fn main() {
   checks, but can cause UB if the program arguments are invalid UTF-8. Use disrecommended unless you can guarantee the 
   returned `&'static str`s will be used safely or invalid UTF-8 will never be used.
 
+[//]: # (TODO: new flags)
+
 ### Types
 
 [//]: # (TODO: performance and benchmarks)
@@ -161,6 +163,25 @@ fn main() {
     }).collect();
 
     println!("Argument lengths: {:?}", lengths);
+}
+```
+
+### Indexed parsing
+
+```rust
+use snailx::indexing_parser::{IndexingParser, OptRule};
+
+fn main() {
+    let mut parser = Parser::new();
+    parser.parse(&[
+        OptRule::new_auto("number")
+    ]);
+    if let Some(num) = parser.option("number").and_then(|num_vals| num_vals.next()).and_then(|num_str| num_str.parse::<u64>()) {
+        // do something with the number
+        for i in 0..num {
+            println!("{}", i);
+        }
+    }
 }
 ```
 

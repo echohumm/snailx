@@ -4,6 +4,10 @@ import! {
     mem::size_of
 }
 
+// TODO: i remember this being faster than just copying the implementation from str/validations.rs.
+//  make sure that is still the case.
+
+#[allow(clippy::inline_always)]
 #[inline(always)]
 pub fn is_valid_utf8(v: &[u8]) -> bool {
     const ASCII_BS: usize = 2 * size_of::<usize>();

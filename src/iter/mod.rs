@@ -5,7 +5,7 @@ pub mod mapped_args;
 
 #[allow(clippy::inline_always)]
 pub mod helpers {
-    /// Helper to get the unsigned remaining length between two pointers.
+    /// Helper to get the unsigned remaining distance between two pointers.
     ///
     /// # Safety
     ///
