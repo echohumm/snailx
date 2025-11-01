@@ -125,9 +125,11 @@ mod iter;
 #[cfg(any(debug_assertions, not(feature = "assume_valid_str")))] mod str_checks;
 
 pub use {
-    ffi::minimal_cstr::{CStr, StdCStr},
+    ffi::minimal_cstr::CStr,
     iter::{args::*, mapped_args::*}
 };
+#[cfg(any(feature = "to_core_cstr", feature = "std"))]
+pub use ffi::minimal_cstr::StdCStr;
 
 #[cfg(feature = "__bench")]
 #[allow(missing_docs)]
