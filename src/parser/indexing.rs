@@ -23,10 +23,10 @@ macro_rules! tri {
             Err(err) => return Err(ParseError::InvalidStr($i, err))
         }
     };
-    (opt:$e:expr) => {
+    (opt:$e:expr,$other:expr) => {
         match $e {
             Some(val) => val,
-            None => return None
+            None => return (None, $other)
         }
     };
 }
@@ -80,7 +80,8 @@ impl IndexingParser {
             return Ok(());
         }
         let (argc, argv) = argc_argv();
-        let len = argc as usize;
+        let len_1 = argc as usize;
+        let len = len_1 - 1;
 
         let mut positionals = 0;
         let mut i = 0;
@@ -93,6 +94,7 @@ impl IndexingParser {
             loop {
                 let current_raw = argv.add(i);
                 let current = current_raw.read();
+                // TODO: maybe allow non-UTF8?
                 let str = if let Some(next) = next {
                     next
                 } else {
@@ -101,7 +103,7 @@ impl IndexingParser {
 
                 if i < len {
                     let i = i + 1;
-                    next = Some(tri!(str:i CStr::from_ptr(current).to_stdlib().to_str()))
+                    next = Some(tri!(str:i CStr::from_ptr(current_raw.add(1).read()).to_stdlib().to_str()));
                 }
 
                 if i == 0 && is_first_prog(str) {
@@ -113,7 +115,7 @@ impl IndexingParser {
                     match (chars.next(), chars.next(), chars.next()) {
                         (Some(INDICATOR), Some(INDICATOR), Some(_)) => {
                             // long
-                            self.push_long(str, current_raw, rules, len - i - 1, &mut i, next);
+                            self.push_long(str, current_raw, rules, len - i, &mut i, next);
                         }
                         (Some(INDICATOR), Some(INDICATOR), None) => {
                             // end-of-args marker --
@@ -121,21 +123,18 @@ impl IndexingParser {
                         }
                         (Some(INDICATOR), Some(_), _) => {
                             // single short
-                            self.push_short(str, current_raw, rules, len - i - 1, &mut i, next);
+                            self.push_short(str, current_raw, rules, len - i, &mut i, next);
                         }
                         // no need for (Some('-'), None, None), the stdin shorthand as it's just a
                         //  positional, so the below catches it
-                        (Some(_), _, _) => {
+                        _ => {
                             self.push_positional(&mut positionals, str);
                         }
-                        // under normal circumstances, no argument will be zero-length. Chars is
-                        // Fused so 1 None means all None
-                        (None, _, _) => {}
                     }
                 }
 
                 i += 1;
-                if i == len {
+                if i == len_1 {
                     self.positionals = positionals;
                     return Ok(());
                 }
@@ -196,26 +195,31 @@ impl IndexingParser {
         false
     }
 
-    /// Returns an iterator over values for `name`.
-    /// Returns `None` if the option was not specified or has no values.
+    /// Returns an iterator over values for `name` if any.
+    ///
+    /// Returns `(None, true)` if the option has no values, or `(None, false)` if it wasn't
+    /// specified.
     #[must_use]
     #[inline]
-    pub fn option(&self, name: &'static str) -> Option<OptValues> {
+    pub fn option(&self, name: &'static str) -> (Option<OptValues>, bool) {
         for (id, arg) in &self.index {
             match id {
                 Ident::Option(rule_name) if *rule_name == name => {
-                    let val = tri!(opt:arg.val());
+                    let val = tri!(opt:arg.val(), true);
 
-                    return Some(OptValues {
-                        cur: val.cast::<*const u8>(),
-                        end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
-                        offset: arg.val_offset().unwrap_or(0)
-                    });
+                    return (
+                        Some(OptValues {
+                            cur: val.cast::<*const u8>(),
+                            end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
+                            offset: arg.val_offset().unwrap_or(0)
+                        }),
+                        true
+                    );
                 }
                 _ => {}
             }
         }
-        None
+        (None, false)
     }
 
     // helpers
@@ -248,7 +252,7 @@ impl IndexingParser {
                     );
                     self.index.insert(
                         Ident::Option(rule.name()),
-                        Argument::Opt { opt: s, val, val_offset }
+                        Argument::new_maybe_opt(s, val, val_offset)
                     );
                 }
                 _ => {}
@@ -269,6 +273,8 @@ impl IndexingParser {
         // cut off '-'
         let cut = &s[1..];
 
+        // TODO: support -n1000 syntax
+
         for (c_i, c) in cut.char_indices() {
             // TODO: more efficient rule matching than a for loop (both in here and in push_long)
             //  already tried a HashMap but it was slower (25x slower). might have done smth wrong
@@ -277,13 +283,13 @@ impl IndexingParser {
                     Some(rule_c) if rule_c == c => {
                         self.index.insert(
                             Ident::Option(rule.name()),
-                            Argument::Opt {
-                                opt: &cut[c_i..=c_i],
+                            Argument::new_maybe_opt(
+                                &cut[c_i..=c_i],
                                 // this does in theory allow for things like "-nm 100 100", while
                                 //  the gnu/posix standards don't
-                                val: IndexingParser::parse_vals(raw, rule, remaining, i, next_peek),
-                                val_offset: 0
-                            }
+                                IndexingParser::parse_vals(raw, rule, remaining, i, next_peek),
+                                0
+                            )
                         );
                     }
                     _ => {}
@@ -570,6 +576,18 @@ enum Argument {
 
 #[allow(clippy::inline_always)]
 impl Argument {
+    fn new_maybe_opt(opt: &'static str, val: *const [*const u8], val_offset: usize) -> Argument {
+        if val.is_null() {
+            Argument::ProgFlagOrPos(opt)
+        } else {
+            Argument::Opt {
+                opt,
+                val,
+                val_offset
+            }
+        }
+    }
+
     #[inline(always)]
     const fn opt(&self) -> &'static str {
         match self {
