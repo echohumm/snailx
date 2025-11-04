@@ -2,7 +2,7 @@
 
 [package]
 name = "snailx"
-version = "0.8.1"
+version = "0.8.2"
 authors = ["echohumm <echo0humm@gmail.com>"]
 edition = "2015"
 rust-version = "1.48.0"
@@ -16,7 +16,7 @@ build = "build.rs"
 exclude = ["/src/main.rs", "/extra/", "generated/"]
 
 [package.metadata.docs.rs]
-features = ["std", "to_core_cstr"]
+features = ["std", "to_core_cstr", "indexing_parser", "infallible_map", "rev_iter"]
 
 [features]
 # dev features, irrelevant to users
