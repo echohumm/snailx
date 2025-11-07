@@ -206,7 +206,7 @@ impl IndexingParser {
     /// Otherwise `None`.
     #[must_use]
     #[inline]
-    pub fn prog_name(&self) -> Option<&'static str> {
+    pub const fn prog_name(&self) -> Option<&'static str> {
         if self.prog.is_empty() { None } else { Some(self.prog) }
     }
 
@@ -307,7 +307,7 @@ impl IndexingParser {
                     }
                     self.option_index.insert(
                         rule.name(),
-                        Argument::new_maybe_opt(s, val, val_offset)
+                        Argument::new_maybe_opt(val, val_offset)
                     );
                 }
                 _ => {}
@@ -332,7 +332,7 @@ impl IndexingParser {
 
         // TODO: support -n1000 syntax
 
-        for (c_i, c) in cut.char_indices() {
+        for c in cut.chars() {
             // TODO: more efficient rule matching than a for loop (both in here and in push_long)
             //  already tried a HashMap but it was slower (25x slower). might have done smth wrong
             for rule in rules {
@@ -350,7 +350,6 @@ impl IndexingParser {
                         self.option_index.insert(
                             rule.name(),
                             Argument::new_maybe_opt(
-                                &cut[c_i..=c_i],
                                 // this does in theory allow for things like "-nm 100 100", while
                                 //  the gnu/posix standards don't
                                 val,
@@ -421,7 +420,7 @@ impl IndexingParser {
         writeln!(f, "IndexingParser(")?;
 
         if !self.prog.is_empty() {
-            writeln!(f, "    Program executable: {}", self.prog)?
+            writeln!(f, "    Program executable: {}", self.prog)?;
         }
         for (i, arg) in self.positionals.iter().enumerate() {
             writeln!(f, "    Positional #{}: {}", i, arg)?;
@@ -669,9 +668,8 @@ impl OptRule {
 }
 
 enum Argument {
-    Flag(&'static str),
+    Flag,
     Opt {
-        opt: &'static str,
         val: *const [*const u8],
         // for long=value form. the index of the first char following the = sign.
         val_offset: usize
@@ -680,21 +678,14 @@ enum Argument {
 
 #[allow(clippy::inline_always)]
 impl Argument {
-    fn new_maybe_opt(opt: &'static str, val: *const [*const u8], val_offset: usize) -> Argument {
-        if val.is_null() { Argument::Flag(opt) } else { Argument::Opt { opt, val, val_offset } }
-    }
-
-    #[inline(always)]
-    const fn opt(&self) -> &'static str {
-        match self {
-            Argument::Flag(opt) | Argument::Opt { opt, .. } => opt
-        }
+    fn new_maybe_opt(val: *const [*const u8], val_offset: usize) -> Argument {
+        if val.is_null() { Argument::Flag } else { Argument::Opt { val, val_offset } }
     }
 
     #[inline(always)]
     const fn val(&self) -> Option<*const [*const u8]> {
         match self {
-            Argument::Flag(_) => None,
+            Argument::Flag => None,
             Argument::Opt { val, .. } => Some(*val)
         }
     }
@@ -702,7 +693,7 @@ impl Argument {
     #[inline(always)]
     const fn val_offset(&self) -> Option<usize> {
         match self {
-            Argument::Flag(_) => None,
+            Argument::Flag => None,
             Argument::Opt { val_offset, .. } => Some(*val_offset)
         }
     }
