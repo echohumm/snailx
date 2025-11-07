@@ -1020,10 +1020,10 @@ fn bench_indexing_parser_minimal(c: &mut Criterion) {
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
+                if let Ok(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
+                if let Ok(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },
@@ -1064,10 +1064,10 @@ fn bench_indexing_parser_preset_cmdline(c: &mut Criterion) {
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
+                if let Ok(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
+                if let Ok(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },
@@ -1105,10 +1105,10 @@ fn bench_indexing_parser_long(c: &mut Criterion) {
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
+                if let Ok(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
+                if let Ok(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },

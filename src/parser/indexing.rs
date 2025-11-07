@@ -1,5 +1,5 @@
 use {
-    crate::{cmdline::helpers::try_to_str, direct::argc_argv, iter::helpers::len, CStr},
+    crate::{CStr, cmdline::helpers::try_to_str, direct::argc_argv, iter::helpers::len},
     alloc::vec::Vec,
     std::{
         clone::Clone,
@@ -23,13 +23,13 @@ macro_rules! tri {
     (str:$i:ident $e:expr) => {
         match $e {
             Ok(val) => val,
-            Err(err) => return Err(ParseError::InvalidStr($i, err))
+            Err(err) => return Err(Error::InvalidStr($i, err))
         }
     };
-    (maybeopt:$e:expr) => {
+    (opt_err:$e:expr,$err:expr) => {
         match $e {
             Some(val) => val,
-            None => return MaybeOption::NoValues
+            None => return Err($err)
         }
     };
     (unrp $e:expr) => {
@@ -49,18 +49,29 @@ const INDICATOR: char = '-';
 const EMPTY_STR: &str = "";
 
 /// A parser that indexes program arguments for named access.
-// TODO: update this, is outdated now that positional and option indexes are separate and we have
-//  named positionals
-// ///
-// /// Parses once and stores results for fast lookup. Allocates per argument.
-// /// Estimated allocation is ~90 bytes per argument on 64-bit systems.
-// /// Additionally the temporary HashMap used during `parse` to determine whether required
-// arguments /// were found adds roughly ~24 bytes per *required* option. Actual numbers depend on
-// target pointer /// width, allocator and runtime layout.
+///
+/// Parses once and stores results for fast lookup. Allocates per argument kind.
+///
+/// # Heap memory usage (approx., 64-bit):
+/// - Positional arguments: stored as &str in a Vec, ~16 bytes per positional plus amortized Vec
+///   capacity.
+/// - Options: stored in a BTreeMap keyed by rule name, ~80–120 bytes per present option.
+/// - Named positionals: stored in a HashMap<&'static str, usize>, ~24–40 bytes per named entry
+///   depending on load factor.
+///
+/// Additionally, the temporary HashMap used during `parse` to determine whether required arguments
+/// were found adds roughly ~24 bytes per *required* option. Actual numbers depend on target pointer
+/// width, allocator, etc. If you need low memory usage, benchmark to determine actual memory usage
+/// first.
 pub struct IndexingParser {
+    // program name. empty = None
     prog: &'static str,
+    // map correlating option names to their values. BTreeMap for its auto-sorting properties,
+    // since HashMap leads to terrible Debug output.
     option_index: BTreeMap<&'static str, Argument>,
+    // the values of positionals. elem 0 = first positional, elem 1 = second, etc.
     positionals: Vec<&'static str>,
+    // map correlating the names of named positionals to their indexes.
     positional_names: HashMap<&'static str, usize>
 }
 
@@ -90,15 +101,20 @@ impl IndexingParser {
     /// - `rules`: slice of `OptRule` that describe recognized options.
     /// - `is_first_prog`: callback that identifies the program executable in the first arg.
     ///
-    /// Returns `Ok(())` on success.
-    /// Returns `Err(ParseError::InvalidStr)` if any argument contains invalid UTF-8.
+    /// # Errors
+    ///
+    /// - [`Error::InvalidStr`] if any argument contains invalid UTF-8. Parsing aborted.
+    /// - [`Error::WrongPositionalCount(n)`] if the amount of found positionals was not in
+    ///   `positional_range`. Parsing was otherwise successful.
+    /// - [`Error::MissingRequired(missing)`] if any required options were missing. Parsing was
+    ///   otherwise successful.
     pub fn parse(
         &mut self,
         rules: &[OptRule],
         positional_range: impl RangeBounds<usize>,
         positional_names: &[(&'static str, usize)],
         is_first_prog: impl Fn(&'static str) -> bool
-    ) -> Result<(), ParseError> {
+    ) -> Result<(), Error> {
         if !self.option_index.is_empty() {
             // already parsed
             return Ok(());
@@ -190,9 +206,9 @@ impl IndexingParser {
                         .iter()
                         .filter_map(|(name, found)| if *found { None } else { Some(*name) });
                     if missing.clone().count() != 0 {
-                        return Err(ParseError::MissingRequired(missing.collect()));
+                        return Err(Error::MissingRequired(missing.collect()));
                     } else if !positional_range.contains(&self.positional_count()) {
-                        return Err(ParseError::WrongPositionalCount(self.positional_count()));
+                        return Err(Error::WrongPositionalCount(self.positional_count()));
                     }
                     return Ok(());
                 }
@@ -224,15 +240,27 @@ impl IndexingParser {
         self.positionals.get(n).copied()
     }
 
-    // TODO: differentiate the two `None` cases with a Result and Err
     /// Returns the positional with the given name. This will return `None` if there is no
     /// positional with that name or the index of the positional with that name does not exist.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::NotFound`] if no positional has the requested name.
+    /// - [`Error::NoValue`] if the positional index correlated with that name has no value.
     #[inline]
-    pub fn named_positional(&self, name: &'static str) -> Option<&'static str> {
-        self.positional_names.get(name).and_then(|n| self.positional(*n))
+    pub fn named_positional(&self, name: &'static str) -> Result<&'static str, Error> {
+        self.positional_names
+            .get(name)
+            .map_or(Err(Error::NotFound), |n| self.positional(*n).ok_or(Error::NoValue))
     }
     // TODO: make these part of a trait
+
+    /// Returns a slice of all indexed positionals.
+    #[must_use]
+    #[inline]
+    pub fn positionals(&self) -> &[&'static str] {
+        &self.positionals
+    }
 
     /// Returns `true` if an option with `name` was present.
     ///
@@ -252,21 +280,20 @@ impl IndexingParser {
     ///
     /// Returns `(None, true)` if the option has no values, or `(None, false)` if it wasn't
     /// specified.
-    #[must_use]
     #[inline]
-    pub fn option(&self, name: &'static str) -> MaybeOption {
+    pub fn option(&self, name: &'static str) -> Result<OptValues, Error> {
         for (id, arg) in &self.option_index {
             if *id == name {
-                let val = tri!(maybeopt:arg.val());
+                let val = tri!(opt_err:arg.val(), Error::NoValue);
 
-                return MaybeOption::Option(OptValues {
+                return Ok(OptValues {
                     cur: val.cast::<*const u8>(),
                     end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
                     offset: arg.val_offset().unwrap_or(0)
                 });
             }
         }
-        MaybeOption::NotPresent
+        Err(Error::NotFound)
     }
 
     // helpers
@@ -305,10 +332,7 @@ impl IndexingParser {
                             *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
                         }
                     }
-                    self.option_index.insert(
-                        rule.name(),
-                        Argument::new_maybe_opt(val, val_offset)
-                    );
+                    self.option_index.insert(rule.name(), Argument::new_maybe_opt(val, val_offset));
                 }
                 _ => {}
             }
@@ -330,14 +354,15 @@ impl IndexingParser {
         // cut off '-'
         let cut = &s[1..];
 
-        // TODO: support -n1000 syntax
-
         for c in cut.chars() {
             // TODO: more efficient rule matching than a for loop (both in here and in push_long)
             //  already tried a HashMap but it was slower (25x slower). might have done smth wrong
             for rule in rules {
                 match rule.short() {
                     Some(rule_c) if rule_c == c => {
+                        if rule.val_count() != 0 {
+                            todo!("-n1000 syntax")
+                        }
                         let (val, enough_vals) =
                             IndexingParser::parse_vals(raw, rule, remaining, i, next_peek);
                         if rule.required() {
@@ -352,8 +377,7 @@ impl IndexingParser {
                             Argument::new_maybe_opt(
                                 // this does in theory allow for things like "-nm 100 100", while
                                 //  the gnu/posix standards don't
-                                val,
-                                0
+                                val, 0
                             )
                         );
                     }
@@ -368,10 +392,9 @@ impl IndexingParser {
         peek.map_or(false, |s| {
             let mut chars = s.chars();
             match (chars.next(), chars.next(), chars.next()) {
-                // longs, shorts, and bundles are special
+                // longs, shorts, bundles, and end-of-args are special
                 (Some('-'), Some('-'), Some(_)) | (Some('-'), Some(_), _) => true,
-                // anything else (including -/stdin shorthand, empty arg, and eoa) isn't
-                // TODO: decide if eoa should be
+                // anything else (including -/stdin shorthand and empty arg) aren't
                 _ => false
             }
         })
@@ -443,7 +466,7 @@ impl IndexingParser {
         let mut first = true;
 
         if !self.prog.is_empty() {
-            // TODO: don't copy and paste the `first` logic across these three
+            // TODO: don't just copy and paste the `first` logic across these three
             if first {
                 first = false;
             } else {
@@ -490,16 +513,6 @@ impl Debug for IndexingParser {
 
         self.debug_norm(f)
     }
-}
-
-/// placeholder
-pub enum MaybeOption {
-    /// The option was specified, but has no values; it was used as a flag.
-    NoValues,
-    /// The option was not specified.
-    NotPresent,
-    /// The option was specified and has the given values.
-    Option(OptValues)
 }
 
 /// A parsing rule that describes one option. This includes the following metadata:
@@ -701,13 +714,19 @@ impl Argument {
 
 #[derive(Debug)]
 /// An error which can occur while parsing arguments.
-pub enum ParseError {
+pub enum Error {
     /// An argument contained invalid UTF-8.
     InvalidStr(usize, Utf8Error),
     /// Parsing was successful, but by the end there were too few or too many positionals.
     WrongPositionalCount(usize),
-    /// Required options were missing.
-    MissingRequired(Vec<&'static str>)
+    /// The contained required options were missing.
+    MissingRequired(Vec<&'static str>),
+    /// If attempting to access an option, it has no values; it was used as a flag. If attempting to
+    /// access a named positional, there was no value at the correlated index.
+    NoValue,
+    /// If attempting to access an option, it was not specified. If attempting to access a named
+    /// positional, the name was not found.
+    NotFound
 }
 
 // TODO: methods to do things other than iterate like get/get_unchecked, etc.
@@ -743,5 +762,3 @@ impl Iterator for OptValues {
     // TODO: other methods. default implementations should suck for this but i don't feel like
     //  implementing them rn
 }
-
-// TODO: iterators for positionals, etc.
