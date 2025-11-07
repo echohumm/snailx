@@ -1,13 +1,16 @@
 use {
-    crate::{CStr, cmdline::helpers::try_to_str, direct::argc_argv, iter::helpers::len},
+    crate::{cmdline::helpers::try_to_str, direct::argc_argv, iter::helpers::len, CStr},
+    alloc::vec::Vec,
     std::{
-        cmp::{Ord, min},
-        collections::BTreeMap,
+        clone::Clone,
+        cmp::min,
+        collections::{BTreeMap, HashMap},
         fmt::{Debug, Formatter, Result as FmtRes},
+        hint::unreachable_unchecked,
         iter::Iterator,
         marker::Copy,
         mem::transmute,
-        ops::Fn,
+        ops::{Fn, RangeBounds},
         option::Option::{self, None, Some},
         ptr::{self, null},
         result::Result::{self, Err, Ok},
@@ -23,10 +26,16 @@ macro_rules! tri {
             Err(err) => return Err(ParseError::InvalidStr($i, err))
         }
     };
-    (opt:$e:expr,$other:expr) => {
+    (maybeopt:$e:expr) => {
         match $e {
             Some(val) => val,
-            None => return (None, $other)
+            None => return MaybeOption::NoValues
+        }
+    };
+    (unrp $e:expr) => {
+        match $e {
+            Some(val) => val,
+            None => unreachable_unchecked()
         }
     };
 }
@@ -37,14 +46,22 @@ fn null_slice() -> *const [*const u8] {
 
 // indicator of the start of a short, two for a long argument
 const INDICATOR: char = '-';
+const EMPTY_STR: &str = "";
 
 /// A parser that indexes program arguments for named access.
-///
-/// Parses once and stores results for fast lookup. Allocates per argument.
-/// Estimated allocation is ~90 bytes per argument.
+// TODO: update this, is outdated now that positional and option indexes are separate and we have
+//  named positionals
+// ///
+// /// Parses once and stores results for fast lookup. Allocates per argument.
+// /// Estimated allocation is ~90 bytes per argument on 64-bit systems.
+// /// Additionally the temporary HashMap used during `parse` to determine whether required
+// arguments /// were found adds roughly ~24 bytes per *required* option. Actual numbers depend on
+// target pointer /// width, allocator and runtime layout.
 pub struct IndexingParser {
-    index: BTreeMap<Ident, Argument>,
-    positionals: usize
+    prog: &'static str,
+    option_index: BTreeMap<&'static str, Argument>,
+    positionals: Vec<&'static str>,
+    positional_names: HashMap<&'static str, usize>
 }
 
 impl IndexingParser {
@@ -55,12 +72,17 @@ impl IndexingParser {
     #[must_use]
     #[inline(always)]
     pub fn new() -> IndexingParser {
-        IndexingParser { index: BTreeMap::new(), positionals: 0 }
+        IndexingParser {
+            prog: EMPTY_STR,
+            option_index: BTreeMap::new(),
+            positionals: Vec::new(),
+            positional_names: HashMap::new()
+        }
     }
 
     /// Clear parsed index and reset parser state.
     pub fn reset(&mut self) {
-        self.index.clear();
+        self.option_index.clear();
     }
 
     /// Parses program arguments using the provided rules.
@@ -73,9 +95,11 @@ impl IndexingParser {
     pub fn parse(
         &mut self,
         rules: &[OptRule],
+        positional_range: impl RangeBounds<usize>,
+        positional_names: &[(&'static str, usize)],
         is_first_prog: impl Fn(&'static str) -> bool
     ) -> Result<(), ParseError> {
-        if !self.index.is_empty() {
+        if !self.option_index.is_empty() {
             // already parsed
             return Ok(());
         }
@@ -83,12 +107,21 @@ impl IndexingParser {
         let len_1 = argc as usize;
         let len = len_1 - 1;
 
-        let mut positionals = 0;
         let mut i = 0;
         let mut end_of_args = false;
 
         // so we can reuse the pre-str'd next which we need for using values
         let mut next = None;
+
+        let mut found_required = rules
+            .iter()
+            .filter_map(|r| if r.required() { Some((r.name, false)) } else { None })
+            .collect::<HashMap<_, _>>();
+        self.positional_names = positional_names
+            .iter()
+            .copied()
+            .filter(|(_, i)| positional_range.contains(i))
+            .collect::<HashMap<_, _>>();
 
         unsafe {
             loop {
@@ -109,15 +142,23 @@ impl IndexingParser {
                 }
 
                 if i == 0 && is_first_prog(str) {
-                    self.index.insert(Ident::__Prog, Argument::ProgFlagOrPos(str));
+                    self.prog = str;
                 } else if end_of_args {
-                    self.push_positional(&mut positionals, str);
+                    self.push_positional(str);
                 } else {
                     let mut chars = str.chars();
                     match (chars.next(), chars.next(), chars.next()) {
                         (Some(INDICATOR), Some(INDICATOR), Some(_)) => {
                             // long
-                            self.push_long(str, current_raw, rules, len - i, &mut i, next);
+                            self.push_long(
+                                str,
+                                current_raw,
+                                rules,
+                                &mut found_required,
+                                len - i,
+                                &mut i,
+                                next
+                            );
                         }
                         (Some(INDICATOR), Some(INDICATOR), None) => {
                             // end-of-args marker --
@@ -125,19 +166,34 @@ impl IndexingParser {
                         }
                         (Some(INDICATOR), Some(_), _) => {
                             // single short
-                            self.push_short(str, current_raw, rules, len - i, &mut i, next);
+                            self.push_short(
+                                str,
+                                current_raw,
+                                rules,
+                                &mut found_required,
+                                len - i,
+                                &mut i,
+                                next
+                            );
                         }
                         // no need for (Some('-'), None, None), the stdin shorthand as it's just a
                         //  positional, so the below catches it
                         _ => {
-                            self.push_positional(&mut positionals, str);
+                            self.push_positional(str);
                         }
                     }
                 }
 
                 i += 1;
                 if i == len_1 {
-                    self.positionals = positionals;
+                    let missing = found_required
+                        .iter()
+                        .filter_map(|(name, found)| if *found { None } else { Some(*name) });
+                    if missing.clone().count() != 0 {
+                        return Err(ParseError::MissingRequired(missing.collect()));
+                    } else if !positional_range.contains(&self.positional_count()) {
+                        return Err(ParseError::WrongPositionalCount(self.positional_count()));
+                    }
                     return Ok(());
                 }
             }
@@ -151,32 +207,30 @@ impl IndexingParser {
     #[must_use]
     #[inline]
     pub fn prog_name(&self) -> Option<&'static str> {
-        self.index.get(&Ident::__Prog).map(Argument::opt)
+        if self.prog.is_empty() { None } else { Some(self.prog) }
     }
 
     /// Returns number of positional arguments parsed.
     #[must_use]
     #[inline]
-    pub const fn positional_count(&self) -> usize {
-        self.positionals
+    pub fn positional_count(&self) -> usize {
+        self.positionals.len()
     }
 
     /// Returns the `n`th positional argument, or `None` if it does not exist.
     #[must_use]
     #[inline]
     pub fn positional(&self, n: usize) -> Option<&'static str> {
-        if n >= self.positionals {
-            return None;
-        }
-        for (id, arg) in &self.index {
-            match id {
-                Ident::Positional(p_n) if *p_n == n => {
-                    return Some(arg.opt());
-                }
-                _ => {}
-            }
-        }
-        None
+        self.positionals.get(n).copied()
+    }
+
+    // TODO: differentiate the two `None` cases with a Result and Err
+    /// Returns the positional with the given name. This will return `None` if there is no
+    /// positional with that name or the index of the positional with that name does not exist.
+    #[must_use]
+    #[inline]
+    pub fn named_positional(&self, name: &'static str) -> Option<&'static str> {
+        self.positional_names.get(name).and_then(|n| self.positional(*n))
     }
     // TODO: make these part of a trait
 
@@ -186,12 +240,9 @@ impl IndexingParser {
     #[must_use]
     #[inline]
     pub fn flag(&self, name: &'static str) -> bool {
-        for id in self.index.keys() {
-            match id {
-                Ident::Option(rule_name) if *rule_name == name => {
-                    return true;
-                }
-                _ => {}
+        for id in self.option_index.keys() {
+            if *id == name {
+                return true;
             }
         }
         false
@@ -203,43 +254,38 @@ impl IndexingParser {
     /// specified.
     #[must_use]
     #[inline]
-    pub fn option(&self, name: &'static str) -> (Option<OptValues>, bool) {
-        for (id, arg) in &self.index {
-            match id {
-                Ident::Option(rule_name) if *rule_name == name => {
-                    let val = tri!(opt:arg.val(), true);
+    pub fn option(&self, name: &'static str) -> MaybeOption {
+        for (id, arg) in &self.option_index {
+            if *id == name {
+                let val = tri!(maybeopt:arg.val());
 
-                    return (
-                        Some(OptValues {
-                            cur: val.cast::<*const u8>(),
-                            end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
-                            offset: arg.val_offset().unwrap_or(0)
-                        }),
-                        true
-                    );
-                }
-                _ => {}
+                return MaybeOption::Option(OptValues {
+                    cur: val.cast::<*const u8>(),
+                    end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
+                    offset: arg.val_offset().unwrap_or(0)
+                });
             }
         }
-        (None, false)
+        MaybeOption::NotPresent
     }
 
     // helpers
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    fn push_positional(&mut self, positionals: &mut usize, s: &'static str) {
-        // positional
-        self.index.insert(Ident::Positional(*positionals), Argument::ProgFlagOrPos(s));
-        *positionals += 1;
+    fn push_positional(&mut self, s: &'static str) {
+        self.positionals.push(s);
     }
 
+    // TODO: don't allow this, do something better
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     fn push_long(
         &mut self,
         s: &'static str,
         raw: *const *const u8,
         rules: &[OptRule],
+        found_required: &mut HashMap<&'static str, bool>,
         remaining: usize,
         i: &mut usize,
         next_peek: Option<&str>
@@ -248,12 +294,19 @@ impl IndexingParser {
         for rule in rules {
             match rule.long() {
                 Some(rule_s) if rule_s == eq_form.map_or_else(|| &s[2..], |eq| &s[2..eq]) => {
-                    let (val, val_offset) = eq_form.map_or_else(
+                    let ((val, enough_vals), val_offset) = eq_form.map_or_else(
                         || (IndexingParser::parse_vals(raw, rule, remaining, i, next_peek), 0),
-                        |i| (ptr::slice_from_raw_parts(raw, 1), i + 1)
+                        |i| ((ptr::slice_from_raw_parts(raw, 1), rule.val_count() == 1), i + 1)
                     );
-                    self.index.insert(
-                        Ident::Option(rule.name()),
+                    if rule.required() {
+                        // SAFETY: if the rule is required, it must be in the found_required map
+                        // from the start.
+                        unsafe {
+                            *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
+                        }
+                    }
+                    self.option_index.insert(
+                        rule.name(),
                         Argument::new_maybe_opt(s, val, val_offset)
                     );
                 }
@@ -262,12 +315,14 @@ impl IndexingParser {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     fn push_short(
         &mut self,
         s: &'static str,
         raw: *const *const u8,
         rules: &[OptRule],
+        found_required: &mut HashMap<&'static str, bool>,
         remaining: usize,
         i: &mut usize,
         next_peek: Option<&str>
@@ -283,13 +338,22 @@ impl IndexingParser {
             for rule in rules {
                 match rule.short() {
                     Some(rule_c) if rule_c == c => {
-                        self.index.insert(
-                            Ident::Option(rule.name()),
+                        let (val, enough_vals) =
+                            IndexingParser::parse_vals(raw, rule, remaining, i, next_peek);
+                        if rule.required() {
+                            // SAFETY: if the rule is required, it must be in the found_required map
+                            // from the start.
+                            unsafe {
+                                *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
+                            }
+                        }
+                        self.option_index.insert(
+                            rule.name(),
                             Argument::new_maybe_opt(
                                 &cut[c_i..=c_i],
                                 // this does in theory allow for things like "-nm 100 100", while
                                 //  the gnu/posix standards don't
-                                IndexingParser::parse_vals(raw, rule, remaining, i, next_peek),
+                                val,
                                 0
                             )
                         );
@@ -321,20 +385,20 @@ impl IndexingParser {
         remaining: usize,
         i: &mut usize,
         next_peek: Option<&str>
-    ) -> *const [*const u8] {
+    ) -> (*const [*const u8], bool) {
         if IndexingParser::next_is_special(next_peek) {
-            return null_slice();
+            return (null_slice(), false);
         }
 
         match rule.val_count() {
-            0 => null_slice(),
+            0 => (null_slice(), false),
             n => unsafe {
                 let cnt = min(n, remaining);
                 if cnt == 0 {
-                    return null_slice();
+                    return (null_slice(), false);
                 }
                 *i += cnt;
-                ptr::slice_from_raw_parts(raw.add(1), cnt)
+                (ptr::slice_from_raw_parts(raw.add(1), cnt), cnt == n)
             }
         }
     }
@@ -355,54 +419,69 @@ impl IndexingParser {
 
     fn debug_alt(&self, f: &mut Formatter<'_>) -> FmtRes {
         writeln!(f, "IndexingParser(")?;
-        for (id, arg) in &self.index {
-            match id {
-                Ident::__Prog => writeln!(f, "    Program executable: {}", arg.opt())?,
-                Ident::Positional(n) => writeln!(f, "    Positional #{}: {}", n, arg.opt())?,
-                Ident::Option(name) => {
-                    if let Some(val) = arg.val() {
-                        write!(f, "    ?Option?: \"{}\": ", name)?;
-                        IndexingParser::write_vals(f, val)?;
-                        writeln!(f)?;
-                    } else {
-                        writeln!(f, "    ?Flag?: \"{}\"", name)?;
-                    }
-                }
+
+        if !self.prog.is_empty() {
+            writeln!(f, "    Program executable: {}", self.prog)?
+        }
+        for (i, arg) in self.positionals.iter().enumerate() {
+            writeln!(f, "    Positional #{}: {}", i, arg)?;
+        }
+        for (id, arg) in &self.option_index {
+            if let Some(val) = arg.val() {
+                write!(f, "    ?Option?: \"{}\": ", id)?;
+                IndexingParser::write_vals(f, val)?;
+                writeln!(f)?;
+            } else {
+                writeln!(f, "    ?Flag?: \"{}\"", id)?;
             }
         }
+
         writeln!(f, ")")
     }
 
     fn debug_norm(&self, f: &mut Formatter<'_>) -> FmtRes {
         write!(f, "IndexingParser(")?;
         let mut first = true;
-        for (id, arg) in &self.index {
+
+        if !self.prog.is_empty() {
+            // TODO: don't copy and paste the `first` logic across these three
+            if first {
+                first = false;
+            } else {
+                write!(f, ", ")?;
+            }
+            write!(f, "program={:?}", self.prog)?;
+        }
+        for (i, arg) in self.positionals.iter().enumerate() {
+            if first {
+                first = false;
+            } else {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}={:?}", i, arg)?;
+        }
+        for (id, arg) in &self.option_index {
             if first {
                 first = false;
             } else {
                 write!(f, ", ")?;
             }
 
-            match id {
-                Ident::__Prog => write!(f, "program={:?}", arg.opt())?,
-                Ident::Positional(n) => write!(f, "{}={:?}", n, arg.opt())?,
-                Ident::Option(name) => {
-                    if let Some(val) = arg.val() {
-                        write!(f, "{}=", name)?;
-                        IndexingParser::write_vals(f, val)?;
-                    } else {
-                        write!(f, "?flag?=\"{}\"", name)?;
-                    }
-                }
+            if let Some(val) = arg.val() {
+                write!(f, "{}=", id)?;
+                IndexingParser::write_vals(f, val)?;
+            } else {
+                write!(f, "?flag?=\"{}\"", id)?;
             }
         }
+
         write!(f, ")")
     }
 }
 
 impl Debug for IndexingParser {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtRes {
-        if self.index.is_empty() {
+        if self.option_index.is_empty() && self.positionals.is_empty() && self.prog.is_empty() {
             return write!(f, "IndexingParser(unparsed)");
         }
 
@@ -414,37 +493,53 @@ impl Debug for IndexingParser {
     }
 }
 
+/// placeholder
+pub enum MaybeOption {
+    /// The option was specified, but has no values; it was used as a flag.
+    NoValues,
+    /// The option was not specified.
+    NotPresent,
+    /// The option was specified and has the given values.
+    Option(OptValues)
+}
+
 /// A parsing rule that describes one option. This includes the following metadata:
 ///
 /// - `name`: internal lookup name.
 /// - `long`: optional long form (for example `verbose`).
 /// - `short`: optional short form (for example `v`).
 /// - `val_count`: number of following values. Zero means this is a flag.
+/// - `required`: whether the option is required.
 pub struct OptRule {
     name: &'static str,
+    // if non-zero, the option accepts up to val_count following arguments
+    val_count: usize,
+    required: bool,
     // below are optional, where:
     // (_, 0) == None
     long: (*const u8, usize),
     // 0 == None
-    short: char,
-    // why? users have no need for a null pointer, 0-sized long, or null short, and
-    //  making them Options adds 2 bytes
-
-    // if non-zero, the option accepts up to val_count following arguments
-    val_count: usize
+    short: char /* why? users have no need for a null pointer, 0-sized long, or null short, and
+                 *  making them Options adds 2 bytes */
 }
 
 impl OptRule {
     /// Creates an `OptRule` with `name`. No short or long identifier is set.
     #[must_use]
     pub const fn new(name: &'static str) -> OptRule {
-        OptRule { name, long: (null(), 0), short: '\0', val_count: 0 }
+        OptRule { name, long: (null(), 0), short: '\0', val_count: 0, required: false }
     }
 
     /// Creates an `OptRule` whose long identifier equals `name`.
     #[must_use]
     pub const fn new_auto_long(name: &'static str) -> OptRule {
-        OptRule { name, long: (name.as_ptr(), name.len()), short: '\0', val_count: 0 }
+        OptRule {
+            name,
+            long: (name.as_ptr(), name.len()),
+            short: '\0',
+            val_count: 0,
+            required: false
+        }
     }
 
     /// Creates an `OptRule` with long equal to `name` and short set to the first character of
@@ -502,7 +597,8 @@ impl OptRule {
                     transmute::<u32, char>(first_char(name.as_bytes()))
                 }
             },
-            val_count: 0
+            val_count: 0,
+            required: false
         }
     }
 
@@ -524,6 +620,13 @@ impl OptRule {
     #[must_use]
     pub const fn set_val_count(mut self, val_count: usize) -> OptRule {
         self.val_count = val_count;
+        self
+    }
+
+    /// Sets whether this option is required.
+    #[must_use]
+    pub const fn set_required(mut self, required: bool) -> OptRule {
+        self.required = required;
         self
     }
 
@@ -557,17 +660,16 @@ impl OptRule {
     pub const fn val_count(&self) -> usize {
         self.val_count
     }
-}
 
-#[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
-enum Ident {
-    __Prog,
-    Positional(usize),
-    Option(&'static str)
+    /// Gets whether this option is required.
+    #[must_use]
+    pub const fn required(&self) -> bool {
+        self.required
+    }
 }
 
 enum Argument {
-    ProgFlagOrPos(&'static str),
+    Flag(&'static str),
     Opt {
         opt: &'static str,
         val: *const [*const u8],
@@ -579,24 +681,20 @@ enum Argument {
 #[allow(clippy::inline_always)]
 impl Argument {
     fn new_maybe_opt(opt: &'static str, val: *const [*const u8], val_offset: usize) -> Argument {
-        if val.is_null() {
-            Argument::ProgFlagOrPos(opt)
-        } else {
-            Argument::Opt { opt, val, val_offset }
-        }
+        if val.is_null() { Argument::Flag(opt) } else { Argument::Opt { opt, val, val_offset } }
     }
 
     #[inline(always)]
     const fn opt(&self) -> &'static str {
         match self {
-            Argument::ProgFlagOrPos(opt) | Argument::Opt { opt, .. } => opt
+            Argument::Flag(opt) | Argument::Opt { opt, .. } => opt
         }
     }
 
     #[inline(always)]
     const fn val(&self) -> Option<*const [*const u8]> {
         match self {
-            Argument::ProgFlagOrPos(_) => None,
+            Argument::Flag(_) => None,
             Argument::Opt { val, .. } => Some(*val)
         }
     }
@@ -604,7 +702,7 @@ impl Argument {
     #[inline(always)]
     const fn val_offset(&self) -> Option<usize> {
         match self {
-            Argument::ProgFlagOrPos(_) => None,
+            Argument::Flag(_) => None,
             Argument::Opt { val_offset, .. } => Some(*val_offset)
         }
     }
@@ -614,9 +712,14 @@ impl Argument {
 /// An error which can occur while parsing arguments.
 pub enum ParseError {
     /// An argument contained invalid UTF-8.
-    InvalidStr(usize, Utf8Error)
+    InvalidStr(usize, Utf8Error),
+    /// Parsing was successful, but by the end there were too few or too many positionals.
+    WrongPositionalCount(usize),
+    /// Required options were missing.
+    MissingRequired(Vec<&'static str>)
 }
 
+// TODO: methods to do things other than iterate like get/get_unchecked, etc.
 /// An iterator over the values of an option.
 pub struct OptValues {
     cur: *const *const u8,

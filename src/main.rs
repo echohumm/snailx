@@ -173,7 +173,7 @@ fn main() {
 
         let mut args = IndexingParser::new();
         println!("Unparsed: {:?}\n", args);
-        args.parse(rules, |_| true).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| true).expect("failed to parse");
         println!("Parsed: {:?}\n", args);
         println!("Parsed pretty: {:#?}\n", args);
 
@@ -183,7 +183,7 @@ fn main() {
         unsafe {
             set_argc_argv(1, NUM.as_ptr());
         }
-        args.parse(rules, |_| false).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| false).expect("failed to parse");
 
         println!("Parsed (incomplete n): {:?}\n", args);
         println!("Parsed pretty (incomplete n): {:#?}\n", args);
@@ -194,7 +194,7 @@ fn main() {
         unsafe {
             set_argc_argv(2, NUM_FULL.as_ptr());
         }
-        args.parse(rules, |_| false).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| false).expect("failed to parse");
 
         println!("Parsed (full n): {:?}\n", args);
         println!("Parsed pretty (full n): {:#?}\n", args);

@@ -77,14 +77,14 @@ full = ["std", "infallible_map", "rev_iter"]
 
 # commented out until usage because it's a higher msrv than the crate
 
-#[[bench]]
-#name = "bench_gen"
-#path = "extra/bench.rs"
-#harness = false
-#required-features = ["__bench"]
-#
-#[dev-dependencies]
-#criterion = "0.7.0"
+[[bench]]
+name = "bench_gen"
+path = "extra/bench.rs"
+harness = false
+required-features = ["__bench"]
+
+[dev-dependencies]
+criterion = "0.7.0"
 
 [[test]]
 name = "tests_gen"

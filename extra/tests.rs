@@ -890,3 +890,5 @@ fn utf8_rfold_collect_correct() {
         assert_eq!(got.as_slice(), expect.as_slice());
     }
 }
+
+// TODO: test parser

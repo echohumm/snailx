@@ -1004,7 +1004,8 @@ fn bench_indexing_parser_minimal(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                // TODO: bench with named options and different positional ranges too
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p)
             },
             BatchSize::SmallInput
@@ -1015,14 +1016,14 @@ fn bench_indexing_parser_minimal(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let Some(it) = p.option("num") {
+                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let Some(it2) = p.option("gamma") {
+                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },
@@ -1048,7 +1049,7 @@ fn bench_indexing_parser_preset_cmdline(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p)
             },
             BatchSize::SmallInput
@@ -1059,14 +1060,14 @@ fn bench_indexing_parser_preset_cmdline(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let Some(it) = p.option("num") {
+                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let Some(it2) = p.option("gamma") {
+                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },
@@ -1089,7 +1090,7 @@ fn bench_indexing_parser_long(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p)
             },
             BatchSize::SmallInput
@@ -1100,14 +1101,14 @@ fn bench_indexing_parser_long(c: &mut Criterion) {
         b.iter_batched(
             snailx::indexing_parser::IndexingParser::new,
             |mut p| {
-                p.parse(black_box(RULES), black_box(|_| true)).unwrap();
+                p.parse(black_box(RULES), ..usize::MAX, &[], black_box(|_| true)).unwrap();
                 black_box(p.positional(0));
                 black_box(p.flag("alpha"));
                 black_box(p.flag("beta"));
-                if let Some(it) = p.option("num") {
+                if let snailx::indexing_parser::MaybeOption::Option(it) = p.option("num") {
                     let _ = black_box(black_box(it).next());
                 }
-                if let Some(it2) = p.option("gamma") {
+                if let snailx::indexing_parser::MaybeOption::Option(it2) = p.option("gamma") {
                     let _ = black_box(black_box(it2).nth(1));
                 }
             },

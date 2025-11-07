@@ -87,7 +87,7 @@ impl Args {
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
     #[cfg_attr(not(feature = "no_cold"), cold)]
-    pub fn map_str(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
+    pub fn map_utf8(&self) -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>> {
         MappedArgs {
             cur: self.cur,
             end: self.end,
@@ -117,6 +117,24 @@ impl Args {
             #[cfg(feature = "infallible_map")]
             fallible: false
         }
+    }
+
+    /// Gets the element at index `i`, or `None` if the index is out-of-bounds. This does
+    /// _not_ consume elements like `nth`.
+    #[must_use]
+    pub fn get(&self, i: usize) -> Option<CStr<'static>> {
+        if self.len() > i { Some(unsafe { self.get_unchecked(i) }) } else { None }
+    }
+
+    /// Gets the element at index `i`. This does _not_ consume elements.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the element at index `i` exists and is in bounds.
+    #[must_use]
+    pub unsafe fn get_unchecked(&self, i: usize) -> CStr<'static> {
+        #[allow(clippy::cast_ptr_alignment)]
+        self.cur.add(i).cast::<CStr<'static>>().read()
     }
 
     #[allow(clippy::inline_always)]

@@ -4,7 +4,8 @@
 ///
 /// # Examples
 ///
-/// ```
+// miri makes it null so this has to be no_run or miri whines
+/// ```no_run
 /// let (argc, argv) = snailx::direct::argc_argv();
 /// assert!(!argv.is_null());
 /// ```

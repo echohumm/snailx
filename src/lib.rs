@@ -21,6 +21,7 @@
 #![allow(clippy::use_self, clippy::similar_names, clippy::cast_lossless, clippy::doc_markdown)]
 
 #[cfg(feature = "alloc")] extern crate alloc;
+extern crate core;
 
 #[cfg(not(any(unix, target_vendor = "apple")))]
 compile_error!("snailx only supports Unix and macOS");
@@ -124,12 +125,11 @@ mod iter;
 
 #[cfg(any(debug_assertions, not(feature = "assume_valid_str")))] mod str_checks;
 
+#[cfg(any(feature = "to_core_cstr", feature = "std"))] pub use ffi::minimal_cstr::StdCStr;
 pub use {
     ffi::minimal_cstr::CStr,
     iter::{args::*, mapped_args::*}
 };
-#[cfg(any(feature = "to_core_cstr", feature = "std"))]
-pub use ffi::minimal_cstr::StdCStr;
 
 #[cfg(feature = "__bench")]
 #[allow(missing_docs)]

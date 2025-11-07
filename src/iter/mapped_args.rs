@@ -154,6 +154,8 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> MappedArgs<Ret, F> {
             if self.fallible { None } else { Some(unsafe { len(self.cur, self.end) }) }
         }
     }
+
+    // TODO: get/get_unchecked
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
