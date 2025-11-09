@@ -408,7 +408,6 @@ impl IndexingParser {
                                 *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
                             }
                         }
-                        println!("abc: {cut}, {val:?}, {val_offset}");
                         self.option_index
                             .insert(rule.name(), Argument::new_maybe_opt(val, val_offset));
                         if consumed_remaining_arg {

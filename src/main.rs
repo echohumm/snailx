@@ -214,19 +214,34 @@ fn main() {
         println!("Parsed pretty (full n, eq): {:#?}\n", args);
 
         assert_eq!(args.option("number").map(|mut it| it.next()), Ok(Some("10")));
-        
+
         #[allow(clippy::items_after_statements)]
         const NUM_FULL_SHORT_SINGLE: [*const u8; 1] = ["-n10\0".as_ptr()];
-        
+
         args.reset();
         unsafe {
             set_argc_argv(1, NUM_FULL_SHORT_SINGLE.as_ptr());
         }
         args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
-        
+
         println!("Parsed (full n, single short): {:?}\n", args);
         println!("Parsed pretty (full n, single short): {:#?}\n", args);
-        
+
+        assert_eq!(args.option("number").map(|mut it| it.next()), Ok(Some("10")));
+
+        #[allow(clippy::items_after_statements)]
+        const NUM_FULL_SHORT_SINGLE_BUNDLE: [*const u8; 1] = ["-gn10\0".as_ptr()];
+
+        args.reset();
+        unsafe {
+            set_argc_argv(1, NUM_FULL_SHORT_SINGLE_BUNDLE.as_ptr());
+        }
+        args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
+
+        println!("Parsed (full n, single short bundle): {:?}\n", args);
+        println!("Parsed pretty (full n, single short bundle): {:#?}\n", args);
+
+        assert!(args.flag("greet"));
         assert_eq!(args.option("number").map(|mut it| it.next()), Ok(Some("10")));
     }
 
