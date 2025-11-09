@@ -167,8 +167,8 @@ fn main() {
         use snailx::indexing_parser::{IndexingParser, OptRule};
 
         let rules = &[
-            OptRule::new("greet").set_long("greet").set_short('g'),
-            OptRule::new("number").set_long("number").set_short('n').set_val_count(1)
+            OptRule::new_auto("greet"),
+            OptRule::new_auto("number").set_val_count(1)
         ];
 
         let mut args = IndexingParser::new();
@@ -200,6 +200,34 @@ fn main() {
 
         println!("Parsed (full n): {:?}\n", args);
         println!("Parsed pretty (full n): {:#?}\n", args);
+
+        #[allow(clippy::items_after_statements)]
+        const NUM_FULL_EQ: [*const u8; 1] = ["--number=10\0".as_ptr()];
+
+        args.reset();
+        unsafe {
+            set_argc_argv(1, NUM_FULL_EQ.as_ptr());
+        }
+        args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
+
+        println!("Parsed (full n, eq): {:?}\n", args);
+        println!("Parsed pretty (full n, eq): {:#?}\n", args);
+
+        assert_eq!(args.option("number").map(|mut it| it.next()), Ok(Some("10")));
+        
+        #[allow(clippy::items_after_statements)]
+        const NUM_FULL_SHORT_SINGLE: [*const u8; 1] = ["-n10\0".as_ptr()];
+        
+        args.reset();
+        unsafe {
+            set_argc_argv(1, NUM_FULL_SHORT_SINGLE.as_ptr());
+        }
+        args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
+        
+        println!("Parsed (full n, single short): {:?}\n", args);
+        println!("Parsed pretty (full n, single short): {:#?}\n", args);
+        
+        assert_eq!(args.option("number").map(|mut it| it.next()), Ok(Some("10")));
     }
 
     // CLI: [reps] [arg_count]

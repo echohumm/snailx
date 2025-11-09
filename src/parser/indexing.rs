@@ -92,15 +92,18 @@ impl IndexingParser {
 
     /// Clear parsed index and reset parser state.
     pub fn reset(&mut self) {
+        self.prog = EMPTY_STR;
         self.option_index.clear();
+        self.positionals.clear();
+        self.positional_names.clear();
     }
 
-    // TODO: use a IndexingParserBuilder or something so parse can have defaults and be simpler. 
-    //  like IndexingParser::builder().rules(&[...]).build() where build just creates an 
+    // TODO: use a IndexingParserBuilder or something so parse can have defaults and be simpler.
+    //  like IndexingParser::builder().rules(&[...]).build() where build just creates an
     //  IndexingParser, calls parse with its stored values, and returns the IndexingParser
     /// Parses program arguments using the provided rules.
-    // /// 
-    // /// Prefer using [`IndexingParserBuilder`] as it greatly simplifies this and provides 
+    // ///
+    // /// Prefer using [`IndexingParserBuilder`] as it greatly simplifies this and provides
     // /// defaults.
     ///
     /// - `rules`: slice of `OptRule`s that describes recognized options.
@@ -304,7 +307,7 @@ impl IndexingParser {
                 return Ok(OptValues {
                     cur: val.cast::<*const u8>(),
                     end: unsafe { val.cast::<*const u8>().add((&*val).len()) },
-                    offset: arg.val_offset().unwrap_or(0)
+                    offset: arg.val_offset()
                 });
             }
         }
@@ -332,7 +335,7 @@ impl IndexingParser {
         i: &mut usize,
         next_peek: Option<&str>
     ) {
-        let eq_form = s.chars().position(|c| c == '=');
+        let eq_form = s.find('=');
         for rule in rules {
             match rule.long() {
                 Some(rule_s) if rule_s == eq_form.map_or_else(|| &s[2..], |eq| &s[2..eq]) => {
@@ -370,7 +373,7 @@ impl IndexingParser {
         // cut off '-'
         let cut = &s[1..];
 
-        for (c_i, c) in cut.char_indices() {
+        for (c_i, c) in cut.char_indices().map(|(i, c)| (i + 1, c)) {
             // TODO: more efficient rule matching than a for loop (both in here and in push_long)
             //  already tried a HashMap but it was slower (25x slower). might have done smth wrong
             for rule in rules {
@@ -380,8 +383,7 @@ impl IndexingParser {
                         // next as the value. this allows for "-vn1000" but not "-nm 100 100", more
                         // standard and expected behavior
                         let ((val, enough_vals), val_offset, consumed_remaining_arg) =
-                            match (allow_multiple_vals, rule.val_count() != 0, c_i + 1 < cut.len())
-                            {
+                            match (allow_multiple_vals, rule.val_count() != 0, c_i < cut.len()) {
                                 // we only use the rest of the argument if the current both has a
                                 // value, there are more characters, and the caller doesn't want
                                 // -nm 100 100 syntax.
@@ -406,6 +408,7 @@ impl IndexingParser {
                                 *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
                             }
                         }
+                        println!("abc: {cut}, {val:?}, {val_offset}");
                         self.option_index
                             .insert(rule.name(), Argument::new_maybe_opt(val, val_offset));
                         if consumed_remaining_arg {
@@ -456,16 +459,16 @@ impl IndexingParser {
         }
     }
 
-    // TODO: make below better in general
+    // TODO: make below better in general.
 
-    fn write_vals(f: &mut Formatter<'_>, vals: *const [*const u8]) -> FmtRes {
+    fn write_vals(f: &mut Formatter<'_>, vals: *const [*const u8], val_offset: usize) -> FmtRes {
         let slice = unsafe { &*vals };
         write!(f, "[")?;
         for (i, &p) in slice.iter().enumerate() {
             if i != 0 {
                 write!(f, ", ")?;
             }
-            match try_to_str(p) {
+            match try_to_str(unsafe { p.add(val_offset) }) {
                 Some(s) => write!(f, "{:?}", s)?,
                 None => write!(f, "{:p}", p)?
             }
@@ -485,7 +488,7 @@ impl IndexingParser {
         for (id, arg) in &self.option_index {
             if let Some(val) = arg.val() {
                 write!(f, "    ?Option?: \"{}\": ", id)?;
-                IndexingParser::write_vals(f, val)?;
+                IndexingParser::write_vals(f, val, arg.val_offset())?;
                 writeln!(f)?;
             } else {
                 writeln!(f, "    ?Flag?: \"{}\"", id)?;
@@ -521,7 +524,7 @@ impl IndexingParser {
 
             if let Some(val) = arg.val() {
                 write!(f, "{}=", id)?;
-                IndexingParser::write_vals(f, val)?;
+                IndexingParser::write_vals(f, val, arg.val_offset())?;
             } else {
                 write!(f, "?flag?=\"{}\"", id)?;
             }
@@ -734,15 +737,15 @@ impl Argument {
     }
 
     #[inline(always)]
-    const fn val_offset(&self) -> Option<usize> {
+    const fn val_offset(&self) -> usize {
         match self {
-            Argument::Flag => None,
-            Argument::Opt { val_offset, .. } => Some(*val_offset)
+            Argument::Flag => 0,
+            Argument::Opt { val_offset, .. } => *val_offset
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 /// An error which can occur while parsing arguments.
 pub enum Error {
     /// An argument contained invalid UTF-8.
