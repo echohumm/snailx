@@ -127,7 +127,7 @@ fn main() {
     println!();
 
     #[cfg(feature = "std")]
-    for arg in MappedArgs::osstr() {
+    for arg in MappedArgs::os() {
         println!("osstr arg: {}", arg.to_string_lossy());
     }
 
@@ -149,7 +149,7 @@ fn main() {
     println!();
 
     #[cfg(all(feature = "std", feature = "rev_iter"))]
-    for arg in MappedArgs::osstr().rev() {
+    for arg in MappedArgs::os().rev() {
         println!("rev osstr arg: {}", arg.to_string_lossy());
     }
 
@@ -173,28 +173,30 @@ fn main() {
 
         let mut args = IndexingParser::new();
         println!("Unparsed: {:?}\n", args);
-        args.parse(rules, ..usize::MAX, &[], |_| true).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| true, false).expect("failed to parse");
         println!("Parsed: {:?}\n", args);
         println!("Parsed pretty: {:#?}\n", args);
 
+        #[allow(clippy::items_after_statements)]
         const NUM: [*const u8; 1] = ["-n\0".as_ptr()];
 
         args.reset();
         unsafe {
             set_argc_argv(1, NUM.as_ptr());
         }
-        args.parse(rules, ..usize::MAX, &[], |_| false).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
 
         println!("Parsed (incomplete n): {:?}\n", args);
         println!("Parsed pretty (incomplete n): {:#?}\n", args);
 
+        #[allow(clippy::items_after_statements)]
         const NUM_FULL: [*const u8; 2] = ["-n\0".as_ptr(), "10\0".as_ptr()];
 
         args.reset();
         unsafe {
             set_argc_argv(2, NUM_FULL.as_ptr());
         }
-        args.parse(rules, ..usize::MAX, &[], |_| false).expect("failed to parse");
+        args.parse(rules, ..usize::MAX, &[], |_| false, false).expect("failed to parse");
 
         println!("Parsed (full n): {:?}\n", args);
         println!("Parsed pretty (full n): {:#?}\n", args);
@@ -222,7 +224,7 @@ fn main() {
     // snail_osstr
     measure(
         "snail_osstr",
-        MappedArgs::osstr,
+        MappedArgs::os,
         |args| {
             for arg in black_box(args) {
                 black_box(arg);

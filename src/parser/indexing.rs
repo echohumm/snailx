@@ -1,5 +1,5 @@
 use {
-    crate::{CStr, cmdline::helpers::try_to_str, direct::argc_argv, iter::helpers::len},
+    crate::{CStr, direct::argc_argv, helpers::try_to_str, iter::len},
     alloc::vec::Vec,
     std::{
         clone::Clone,
@@ -7,7 +7,7 @@ use {
         collections::{BTreeMap, HashMap},
         fmt::{Debug, Formatter, Result as FmtRes},
         hint::unreachable_unchecked,
-        iter::Iterator,
+        iter::{ExactSizeIterator, Iterator},
         marker::Copy,
         mem::transmute,
         ops::{Fn, RangeBounds},
@@ -53,11 +53,10 @@ const EMPTY_STR: &str = "";
 /// Parses once and stores results for fast lookup. Allocates per argument kind.
 ///
 /// # Heap memory usage (approx., 64-bit):
-/// - Positional arguments: stored as &str in a Vec, ~16 bytes per positional plus amortized Vec
+/// - Positional arguments: stored as &str in a Vec, ~16 bytes per positional plus amortized `Vec`
 ///   capacity.
 /// - Options: stored in a BTreeMap keyed by rule name, ~80–120 bytes per present option.
-/// - Named positionals: stored in a HashMap<&'static str, usize>, ~24–40 bytes per named entry
-///   depending on load factor.
+/// - Named positionals: stored in a HashMap<&'static str, usize>, ~24–40 bytes per named entry.
 ///
 /// Additionally, the temporary HashMap used during `parse` to determine whether required arguments
 /// were found adds roughly ~24 bytes per *required* option. Actual numbers depend on target pointer
@@ -96,15 +95,26 @@ impl IndexingParser {
         self.option_index.clear();
     }
 
+    // TODO: use a IndexingParserBuilder or something so parse can have defaults and be simpler. 
+    //  like IndexingParser::builder().rules(&[...]).build() where build just creates an 
+    //  IndexingParser, calls parse with its stored values, and returns the IndexingParser
     /// Parses program arguments using the provided rules.
+    // /// 
+    // /// Prefer using [`IndexingParserBuilder`] as it greatly simplifies this and provides 
+    // /// defaults.
     ///
-    /// - `rules`: slice of `OptRule` that describe recognized options.
+    /// - `rules`: slice of `OptRule`s that describes recognized options.
+    /// - `positional_range`: range of valid positional counts.
+    /// - `positional_names`: names associated with positional indices, allowing for access via
+    ///   [`named_positional`](IndexingParser::named_positional).
     /// - `is_first_prog`: callback that identifies the program executable in the first arg.
+    /// - `allow_multiple_short_vals`: whether to allow "-nm 100 100" syntax (`true`) or "-n1000"
+    ///   (`false`) syntax. For a parser more similar to existing standards, this should be `false`.
     ///
     /// # Errors
     ///
     /// - [`Error::InvalidStr`] if any argument contains invalid UTF-8. Parsing aborted.
-    /// - [`Error::WrongPositionalCount(n)`] if the amount of found positionals was not in
+    /// - [`Error::WrongPositionalCount(n)`] if the number of found positionals was not in
     ///   `positional_range`. Parsing was otherwise successful.
     /// - [`Error::MissingRequired(missing)`] if any required options were missing. Parsing was
     ///   otherwise successful.
@@ -113,7 +123,8 @@ impl IndexingParser {
         rules: &[OptRule],
         positional_range: impl RangeBounds<usize>,
         positional_names: &[(&'static str, usize)],
-        is_first_prog: impl Fn(&'static str) -> bool
+        is_first_prog: impl Fn(&'static str) -> bool,
+        allow_multiple_short_vals: bool
     ) -> Result<(), Error> {
         if !self.option_index.is_empty() {
             // already parsed
@@ -189,7 +200,8 @@ impl IndexingParser {
                                 &mut found_required,
                                 len - i,
                                 &mut i,
-                                next
+                                next,
+                                allow_multiple_short_vals
                             );
                         }
                         // no need for (Some('-'), None, None), the stdin shorthand as it's just a
@@ -226,7 +238,7 @@ impl IndexingParser {
         if self.prog.is_empty() { None } else { Some(self.prog) }
     }
 
-    /// Returns number of positional arguments parsed.
+    /// Returns the number of positional arguments parsed.
     #[must_use]
     #[inline]
     pub fn positional_count(&self) -> usize {
@@ -278,8 +290,11 @@ impl IndexingParser {
 
     /// Returns an iterator over values for `name` if any.
     ///
-    /// Returns `(None, true)` if the option has no values, or `(None, false)` if it wasn't
-    /// specified.
+    /// # Errors
+    ///
+    /// - <code>Err([Error::NotFound])</code> if no positional has the given name.
+    /// - <code>Err([Error::NoValue])</code> if there is no value at the positional index correlated
+    ///   with the given name.
     #[inline]
     pub fn option(&self, name: &'static str) -> Result<OptValues, Error> {
         for (id, arg) in &self.option_index {
@@ -349,22 +364,41 @@ impl IndexingParser {
         found_required: &mut HashMap<&'static str, bool>,
         remaining: usize,
         i: &mut usize,
-        next_peek: Option<&str>
+        next_peek: Option<&str>,
+        allow_multiple_vals: bool
     ) {
         // cut off '-'
         let cut = &s[1..];
 
-        for c in cut.chars() {
+        for (c_i, c) in cut.char_indices() {
             // TODO: more efficient rule matching than a for loop (both in here and in push_long)
             //  already tried a HashMap but it was slower (25x slower). might have done smth wrong
             for rule in rules {
                 match rule.short() {
                     Some(rule_c) if rule_c == c => {
-                        if rule.val_count() != 0 {
-                            todo!("-n1000 syntax")
-                        }
-                        let (val, enough_vals) =
-                            IndexingParser::parse_vals(raw, rule, remaining, i, next_peek);
+                        // if it has a value, we end the bundle and parse the rest of the arg or the
+                        // next as the value. this allows for "-vn1000" but not "-nm 100 100", more
+                        // standard and expected behavior
+                        let ((val, enough_vals), val_offset, consumed_remaining_arg) =
+                            match (allow_multiple_vals, rule.val_count() != 0, c_i + 1 < cut.len())
+                            {
+                                // we only use the rest of the argument if the current both has a
+                                // value, there are more characters, and the caller doesn't want
+                                // -nm 100 100 syntax.
+                                (false, true, true) => (
+                                    (ptr::slice_from_raw_parts(raw, 1), rule.val_count() == 1),
+                                    c_i + 1,
+                                    true
+                                ),
+                                // otherwise, we use the next argument (if the current has a value).
+                                // parse_vals will handle the case where it has no value, slightly
+                                // faster than handling it here despite slight redundancy.
+                                _ => (
+                                    IndexingParser::parse_vals(raw, rule, remaining, i, next_peek),
+                                    0,
+                                    false
+                                )
+                            };
                         if rule.required() {
                             // SAFETY: if the rule is required, it must be in the found_required map
                             // from the start.
@@ -372,14 +406,11 @@ impl IndexingParser {
                                 *tri!(unrp found_required.get_mut(rule.name())) = enough_vals;
                             }
                         }
-                        self.option_index.insert(
-                            rule.name(),
-                            Argument::new_maybe_opt(
-                                // this does in theory allow for things like "-nm 100 100", while
-                                //  the gnu/posix standards don't
-                                val, 0
-                            )
-                        );
+                        self.option_index
+                            .insert(rule.name(), Argument::new_maybe_opt(val, val_offset));
+                        if consumed_remaining_arg {
+                            break;
+                        }
                     }
                     _ => {}
                 }
@@ -424,6 +455,9 @@ impl IndexingParser {
             }
         }
     }
+
+    // TODO: make below better in general
+
     fn write_vals(f: &mut Formatter<'_>, vals: *const [*const u8]) -> FmtRes {
         let slice = unsafe { &*vals };
         write!(f, "[")?;
@@ -462,32 +496,28 @@ impl IndexingParser {
     }
 
     fn debug_norm(&self, f: &mut Formatter<'_>) -> FmtRes {
+        fn write_sep(first: &mut bool, f: &mut Formatter<'_>) -> FmtRes {
+            if *first {
+                *first = false;
+            } else {
+                write!(f, ", ")?;
+            }
+            Ok(())
+        }
+
         write!(f, "IndexingParser(")?;
         let mut first = true;
 
         if !self.prog.is_empty() {
-            // TODO: don't just copy and paste the `first` logic across these three
-            if first {
-                first = false;
-            } else {
-                write!(f, ", ")?;
-            }
+            write_sep(&mut first, f)?;
             write!(f, "program={:?}", self.prog)?;
         }
         for (i, arg) in self.positionals.iter().enumerate() {
-            if first {
-                first = false;
-            } else {
-                write!(f, ", ")?;
-            }
+            write_sep(&mut first, f)?;
             write!(f, "{}={:?}", i, arg)?;
         }
         for (id, arg) in &self.option_index {
-            if first {
-                first = false;
-            } else {
-                write!(f, ", ")?;
-            }
+            write_sep(&mut first, f)?;
 
             if let Some(val) = arg.val() {
                 write!(f, "{}=", id)?;
@@ -729,12 +759,33 @@ pub enum Error {
     NotFound
 }
 
-// TODO: methods to do things other than iterate like get/get_unchecked, etc.
 /// An iterator over the values of an option.
 pub struct OptValues {
     cur: *const *const u8,
     end: *const *const u8,
     offset: usize
+}
+
+impl OptValues {
+    /// Gets the element at index `i`, or `None` if the index is out-of-bounds. This does _not_
+    /// consume elements like `nth`.
+    #[must_use]
+    #[inline]
+    pub fn get(&self, i: usize) -> Option<CStr<'static>> {
+        if self.len() > i { Some(unsafe { self.get_unchecked(i) }) } else { None }
+    }
+
+    /// Gets the element at index `i`. This does _not_ consume elements.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the element at index `i` exists and is in bounds.
+    #[must_use]
+    #[inline]
+    pub unsafe fn get_unchecked(&self, i: usize) -> CStr<'static> {
+        #[allow(clippy::cast_ptr_alignment)]
+        self.cur.add(i).cast::<CStr<'static>>().read()
+    }
 }
 
 impl Iterator for OptValues {
@@ -752,6 +803,8 @@ impl Iterator for OptValues {
         try_to_str(unsafe { p.read().add(self.offset) })
     }
 
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
         // this is probably cheaper than checking with an if statement whether offset > 0 and using
         // (1, Some(1)) in that case, so this works.
@@ -761,4 +814,10 @@ impl Iterator for OptValues {
 
     // TODO: other methods. default implementations should suck for this but i don't feel like
     //  implementing them rn
+}
+
+impl ExactSizeIterator for OptValues {
+    fn len(&self) -> usize {
+        unsafe { len(self.cur, self.end) }
+    }
 }

@@ -14,7 +14,7 @@ pub type c_int = i32;
 pub type c_uint = u32;
 
 extern "C" {
-    /// Gets the length of a C-style string by finding the first nul byte after the given pointer.
+    /// Gets the length of a C-style string by finding the first `\0` byte after the given pointer.
     pub fn strlen(s: *const c_char) -> size_t;
 }
 
@@ -218,6 +218,7 @@ pub mod minimal_cstr {
         #[must_use]
         #[inline(always)]
         pub unsafe fn from_ptr(p: *const u8) -> CStr<'a> {
+            assume!(!p.is_null(), "`from_ptr`: CStr pointer must be non-null");
             assume!(
                 dbg,
                 {

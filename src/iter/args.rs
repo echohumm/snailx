@@ -15,11 +15,7 @@ import! {
     iter::DoubleEndedIterator
 }
 
-use {
-    crate::{CStr, MappedArgs, cmdline::helpers::try_to_str, iter::helpers::len},
-    cmdline::helpers,
-    direct
-};
+use crate::{CStr, MappedArgs, direct, helpers, iter::len};
 
 // not Copy because that nets a 2-5% performance improvement for some reason
 /// An iterator over program arguments as <code>[CStr](CStr)<'static></code>.
@@ -83,6 +79,23 @@ impl Args {
         MappedArgs { cur: self.cur, end: self.end, map, fallible: false }
     }
 
+    #[cfg(any(feature = "std", feature = "to_core_cstr"))]
+    /// Map this iterator to a different type. Like [`MappedArgs::stdlib_cstr`], but operates on an
+    /// existing iterator.
+    #[must_use]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn map_stdlib_cstr(
+        &self
+    ) -> MappedArgs<&'static crate::StdCStr, fn(*const u8) -> Option<&'static crate::StdCStr>> {
+        MappedArgs {
+            cur: self.cur,
+            end: self.end,
+            map: helpers::to_stdcstr,
+            #[cfg(feature = "infallible_map")]
+            fallible: false
+        }
+    }
+
     /// Map this iterator to `&'static str`. Like [`MappedArgs::utf8`], but operates on an existing
     /// iterator. Non-UTF-8 arguments are skipped.
     #[must_use]
@@ -91,7 +104,7 @@ impl Args {
         MappedArgs {
             cur: self.cur,
             end: self.end,
-            map: try_to_str,
+            map: helpers::try_to_str,
             #[cfg(all(feature = "infallible_map", not(feature = "assume_valid_str")))]
             fallible: true,
             // assume_valid_str makes the map "infallible"
@@ -119,9 +132,13 @@ impl Args {
         }
     }
 
-    /// Gets the element at index `i`, or `None` if the index is out-of-bounds. This does
-    /// _not_ consume elements like `nth`.
+    // TODO: i'd really like to make these part of a trait, but it would be a better fit in a
+    //  separate library. something like a CopyIterator<T: Copy>: Iterator<T>
+
+    /// Gets the element at index `i`, or `None` if the index is out-of-bounds. This does _not_
+    /// consume elements like `nth`.
     #[must_use]
+    #[inline]
     pub fn get(&self, i: usize) -> Option<CStr<'static>> {
         if self.len() > i { Some(unsafe { self.get_unchecked(i) }) } else { None }
     }
@@ -132,6 +149,7 @@ impl Args {
     ///
     /// The caller must ensure the element at index `i` exists and is in bounds.
     #[must_use]
+    #[inline]
     pub unsafe fn get_unchecked(&self, i: usize) -> CStr<'static> {
         #[allow(clippy::cast_ptr_alignment)]
         self.cur.add(i).cast::<CStr<'static>>().read()

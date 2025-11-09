@@ -1,5 +1,8 @@
 # snailx
 
+This README was last updated for release 0.8.4 on 2025-11-08. It is a work in progress and may be out of date, and *is*
+missing the majority of documentation for the parser and related types, functions, and features.
+
 [//]: # (TODO: parser docs and stuff)
 
 ## General information
@@ -10,7 +13,7 @@
 
 ## Overview
 
-`snailx` provides a simple, zero-allocation, zero-dependency API for iterating over program arguments on Unix and MacOS.
+`snailx` provides a simple, zero-allocation, zero-dependency API for iterating over program arguments on Unix and macOS.
 
 ### Benefits
 
@@ -51,23 +54,27 @@ fn main() {
     - CStr
     - OsStr
     - str
-- `no_std` support <small>technically</small>
-- Better performance <small>(WIP)</small>
+- `no_std` support
+- Better performance
     - You can, under most circumstances, expect `snailx` iterators to be at least twice as fast as `std::env::args()`,
       but you should benchmark yourself. In certain cases, `snailx` is up to 6x faster than stdlib, but much slower in
       others.
+
+[//]: # (TODO: info on parser)
 
 ## API
 
 ### Functions
 
 - `Args::new() -> Args` - The basic iterator over the program arguments as `snailx::CStr<'static>`
-- `MappedArgs::osstr() -> MappedArgs<&'static OsStr, fn(*const u8) -> Option<&'static std::ffi::OsStr>` - Iterator over
+- `MappedArgs::os() -> MappedArgs<&'static OsStr, fn(*const u8) -> Option<&'static std::ffi::OsStr>` - Iterator over
   the program arguments as `&'static std::ffi::OsStr`
 - `MappedArgs::utf8() -> MappedArgs<&'static str, fn(*const u8) -> Option<&'static str>` - Iterator over the program
   arguments as `&'static str`
 - `MappedArgs::new<T, F: Fn(*const u8) -> Option<T>>(map: F)` - Iterator over the program arguments as `T`
 - `direct::argc_argv() -> (u32, *const *const u8)` - Raw access to `(argc, argv)`
+
+[//]: # (TODO: new functions)
 
 ### Feature flags
 
@@ -76,19 +83,41 @@ fn main() {
 - `no_cold` - Removes the `#[cold]` attribute from several functions
 - `to_core_cstr` (MSRV 1.64.0) - Enables `snailx::CStr::to_stdlib`
 - `assume_valid_str` - This massively speeds up the iterator returned by `MappedArgs::utf8()` by disabling validity
-  checks, but can cause UB if the program arguments are invalid UTF-8. Use disrecommended unless you can guarantee the 
+  checks, but can cause UB if the program arguments are invalid UTF-8. Not recommended unless you can guarantee the
   returned `&'static str`s will be used safely or invalid UTF-8 will never be used.
 
 [//]: # (TODO: new flags)
 
-### Types
+## Performance and benchmarks
 
-[//]: # (TODO: performance and benchmarks)
+Benchmarks run with: cargo bench -F __full_pure_opt_bench,indexing_parser (bench profile, latest nightly). Numbers below
+use the reported medians. Speedups > 1.0x indicate snailx is faster.
+
+Relative to stdlib (compares `snailx::MappedArgs::utf8() -> impl Iterator<&'static str>` to `std::env::args() -> impl
+Iterator<String>` and `snailx::MappedArgs::os() -> impl Iterator<&'static OsStr>` to `std::env::args_os() -> impl
+Iterator<OsString>`.) Major differences come from `snailx`'s lack of allocation.
+
+| Operation | OsStr speedup | str speedup |
+|-----------|---------------|-------------|
+| iterate   | 3.40x         | 6.84x       |
+| nth       | 1.98x         | 2.26x       |
+| fold      | 1.98x         | 3.40x       |
+
+Notes
+
+- Results can vary by CPU, compiler version, and environment; treat them as indicative.
+- CStr iteration has no direct stdlib counterpart. If using the raw `snailx::CStr`s returned by the `Args` iterator, you
+  can expect extremely fast performance as they require only bounds checking and pointer arithmetic. If you are
+  converting them to stdlib types, you can expect performance similar to `MappedArgs::osstr()`'s iterator.
+
+### Types
 
 - `Args` - Iterator over program arguments as `snailx::CStr<'static>`
 - `MappedArgs<T, F>` - Generic iterator that applies a mapping function to each argument
 - `CStr<'static>` - Minimal C-style string type for zero-allocation argument access. This exists because this crate is
   `no_std`, but `core_cstr` was stabilized after its MSRV.
+
+[//]: # (TODO: new types \(parser and related\) and StdCStr alias)
 
 ## Platform support
 
@@ -155,7 +184,7 @@ fn main() {
         unsafe {
             // simple strlen implementation
             let mut i = 0;
-            while ptr.add(i) != 0 {
+            while *ptr.add(i) != 0 {
                 i += 1;
             }
             Some(i)
@@ -165,6 +194,8 @@ fn main() {
     println!("Argument lengths: {:?}", lengths);
 }
 ```
+
+[//]: # (TODO: below is the only docs on parsing and very out of date, api very different now, update it)
 
 ### Indexed parsing
 
@@ -176,7 +207,9 @@ fn main() {
     parser.parse(&[
         OptRule::new_auto("number")
     ]);
-    if let Some(num) = parser.option("number").and_then(|num_vals| num_vals.next()).and_then(|num_str| num_str.parse::<u64>()) {
+    if let Some(num) = parser.option("number")
+            .and_then(|num_vals| num_vals.next())
+            .and_then(|num_str| num_str.parse::<u64>()) {
         // do something with the number
         for i in 0..num {
             println!("{}", i);

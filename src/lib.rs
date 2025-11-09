@@ -13,7 +13,8 @@
 //! `no_std` by default; enable the `std` feature for `OsStr` support.
 //! Targets Unix-like systems and macOS.
 
-// TODO: make sure every iterator method we impl has tests + benches (fold, rfold, count, last)
+// TODO: make sure every iterator and parser method we impl has tests + benches
+// TODO: break up big files, types, and modules
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![no_implicit_prelude]
@@ -52,7 +53,7 @@ macro_rules! switch {
 
 macro_rules! assume {
     // completely unreachable branches
-    // assumes expression is false
+    // assumes expression is absolutely false
     (!$e:expr) => {
         if $e {
             // SAFETY: this is unreachable
@@ -63,7 +64,7 @@ macro_rules! assume {
         }
     };
 
-    // assumes expression is true
+    // assumes expression is absolutely true
     ($e:expr) => {
         if !$e {
             // SAFETY: this is unreachable
@@ -72,10 +73,6 @@ macro_rules! assume {
                 switch!(core::hint::unreachable_unchecked(););
             }
         }
-    };
-    // potentially reachable branch with default message
-    (re, $e:expr) => {
-        assume!($e, "entered unreachable code");
     };
 
     // debug-only check with custom message
@@ -86,7 +83,7 @@ macro_rules! assume {
         }
     };
 
-    // carry out
+    // carry out (same as [Option,Result]::unwrap_unchecked())
     (car, $exp:ident, $in_name:ident, $e:expr, $($msg:tt)+) => {
         match $e {
             $exp($in_name) => $in_name,
@@ -95,7 +92,7 @@ macro_rules! assume {
         }
     };
 
-    // custom message for both debug and release
+    // custom message for both debug and release (similar to debug_assert)
     ($e:expr, $($msg:tt)+) => {
         if !$e {
             #[cfg(debug_assertions)]
@@ -115,7 +112,6 @@ macro_rules! assume {
 pub mod direct;
 mod ffi;
 
-mod cmdline;
 mod iter;
 
 #[cfg(any(feature = "indexing_parser", feature = "non_indexing_parser"))] mod parser;
@@ -135,5 +131,95 @@ pub use {
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod bench_helpers {
-    pub use {cmdline::helpers::*, ffi::strlen, iter::helpers::len};
+    pub use {ffi::strlen, helpers::*, iter::len};
+}
+
+mod helpers {
+    import! {
+        {
+            mem::transmute,
+            option::Option::{self, Some},
+            slice
+        }
+    }
+    use crate::ffi::strlen;
+
+    #[inline]
+    #[allow(
+        clippy::must_use_candidate,
+        clippy::not_unsafe_ptr_arg_deref,
+        clippy::transmute_bytes_to_str,
+        missing_docs
+    )]
+    pub fn try_to_str(p: *const u8) -> Option<&'static str> {
+        // SAFETY: only called internally with valid CStr pointers from argv
+        unsafe {
+            assume!(!p.is_null());
+            let len = strlen(p.cast());
+            let bytes = slice::from_raw_parts(p, len + 1);
+            assume!(
+                !bytes.is_empty() && bytes[len] == 0,
+                "`try_to_str`: CStr does not end with null byte"
+            );
+
+            let str_bytes = slice::from_raw_parts(p, len);
+
+            #[cfg(not(feature = "assume_valid_str"))]
+            if crate::str_checks::is_valid_utf8(str_bytes) {
+                Some(transmute::<&'static [u8], &'static str>(str_bytes))
+            } else {
+                switch!(core::option::Option::None)
+            }
+
+            #[cfg(feature = "assume_valid_str")]
+            {
+                assume!(
+                    dbg,
+                    crate::str_checks::is_valid_utf8(str_bytes),
+                    "invalid UTF-8 in CStr during conversion to str"
+                );
+                Some(transmute::<&'static [u8], &'static str>(str_bytes))
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[inline]
+    #[allow(
+        clippy::unnecessary_wraps,
+        clippy::must_use_candidate,
+        missing_docs,
+        unused_qualifications
+    )]
+    pub fn to_osstr(p: *const u8) -> Option<&'static ::std::ffi::OsStr> {
+        // SAFETY: only called internally with valid CStr pointers from argv
+        unsafe {
+            assume!(!p.is_null());
+            let len = strlen(p.cast());
+            assume!(!len == 0);
+            Some(&*(switch!(core::ptr::slice_from_raw_parts(p, len)) as *const ::std::ffi::OsStr))
+        }
+    }
+
+    #[cfg(any(feature = "std", feature = "to_core_cstr"))]
+    #[inline]
+    #[allow(clippy::must_use_candidate, clippy::not_unsafe_ptr_arg_deref, missing_docs)]
+    pub fn to_stdcstr(p: *const u8) -> Option<&'static crate::StdCStr> {
+        Some(unsafe { crate::CStr::from_ptr(p).to_stdlib() })
+    }
+
+    #[allow(
+        clippy::inline_always,
+        clippy::must_use_candidate,
+        clippy::not_unsafe_ptr_arg_deref,
+        missing_docs
+    )]
+    #[inline(always)]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn back(argv: *const *const u8, argc: u32) -> *const *const u8 {
+        assume!(!argv.is_null(), "`back`: argv is null");
+        // SAFETY: argv points to a valid slice of argc count pointers, this is one past the last
+        // but always decremented before deref
+        unsafe { argv.add(argc as usize) }
+    }
 }

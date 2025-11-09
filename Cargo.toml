@@ -2,7 +2,7 @@
 
 [package]
 name = "snailx"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["echohumm <echo0humm@gmail.com>"]
 edition = "2015"
 rust-version = "1.48.0"

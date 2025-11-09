@@ -3,6 +3,7 @@
     <words>
       <w>Affero</w>
       <w>cstrs</w>
+      <w>dawg</w>
       <w>maybedo</w>
       <w>modfun</w>
       <w>multiflag</w>
@@ -11,6 +12,7 @@
       <w>positionals</w>
       <w>rustversion</w>
       <w>snailx</w>
+      <w>stdcstr</w>
       <w>str'd</w>
       <w>uclibc</w>
     </words>

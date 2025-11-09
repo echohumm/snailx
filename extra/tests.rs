@@ -34,8 +34,13 @@ const ARG_SET_8: [*const u8; 8] = [
     "plus one\0".as_ptr()
 ];
 
+// formatter makes this longer than it should be for some reason
+#[rustfmt::skip]
 const ARG_SET_SPEC: [*const u8; 2] =
-    ["nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(), "zero-width(space; \"\u{200B}\"\0".as_ptr()];
+    [
+        "nerdfont+ half-battery\\charging: 󰢞\0".as_ptr(),
+        "zero-width(space; \"\u{200B}\"\0".as_ptr()
+    ];
 
 const ARG_SET_LONG: [*const u8; 2] = [
     "very long argument which includes way too much randomly typed text. should this be \
@@ -121,7 +126,12 @@ macro_rules! test_i {
         struct PanicHandler {}
         impl PanicHandler {
             fn new() -> PanicHandler {
-                while GLOBAL_LOCK.compare_exchange(false, true, core::sync::atomic::Ordering::SeqCst, core::sync::atomic::Ordering::SeqCst).is_err() {
+                while GLOBAL_LOCK.compare_exchange(
+                    false,
+                    true,
+                    core::sync::atomic::Ordering::SeqCst,
+                    core::sync::atomic::Ordering::SeqCst
+                ).is_err() {
                     core::hint::spin_loop();
                 }
                 PanicHandler {}
@@ -233,7 +243,7 @@ fn os_correct() {
     test_i! {
         a,
         assert_eq!(
-            snailx::MappedArgs::osstr()
+            snailx::MappedArgs::os()
                 .collect::<Vec<_>>()
                 .as_slice(),
             a
@@ -269,7 +279,7 @@ fn cstr_iter() {
 fn os_iter() {
     test_i! {
         a,
-        let args = snailx::MappedArgs::osstr();
+        let args = snailx::MappedArgs::os();
 
         for (i, arg) in args.enumerate() {
             assert_eq!(arg, snailx::bench_helpers::to_osstr(a[i]).unwrap());
@@ -281,14 +291,14 @@ fn os_iter() {
 fn os_count() {
     test_i! {
         a,
-        let args = snailx::MappedArgs::osstr();
+        let args = snailx::MappedArgs::os();
 
         let mut cnt = 0;
         for _ in args {
             cnt += 1;
         }
         assert_eq!(cnt, a.len());
-        assert_eq!(snailx::MappedArgs::osstr().count(), cnt);
+        assert_eq!(snailx::MappedArgs::os().count(), cnt);
     }
 }
 
@@ -323,7 +333,7 @@ fn cstr_nth() {
 fn os_nth() {
     test_i! {
         a,
-        let mut args = snailx::MappedArgs::osstr();
+        let mut args = snailx::MappedArgs::os();
 
         if !a.is_empty() {
             assert_eq!(args.nth(0).unwrap(), snailx::bench_helpers::to_osstr(a[0]).unwrap());
@@ -363,7 +373,7 @@ fn utf8_size_hint() {
 fn os_size_hint_and_len() {
     test_i! {
         a,
-        let args = snailx::MappedArgs::osstr();
+        let args = snailx::MappedArgs::os();
 
         #[cfg(not(feature = "infallible_map"))]
         assert_eq!(args.size_hint(), (0, Some(a.len())));
@@ -593,7 +603,7 @@ fn cstr_iter_back() {
 fn os_iter_back() {
     test_i! {
         a,
-        let mut args = snailx::MappedArgs::osstr();
+        let mut args = snailx::MappedArgs::os();
 
         for i in (0..a.len()).rev() {
             let arg = args.next_back().unwrap();
@@ -607,14 +617,14 @@ fn os_iter_back() {
 fn os_count_back() {
     test_i! {
         a,
-        let mut args = snailx::MappedArgs::osstr();
+        let mut args = snailx::MappedArgs::os();
 
         let mut cnt = 0;
         while args.next_back().is_some() {
             cnt += 1;
         }
         assert_eq!(cnt, a.len());
-        assert_eq!(snailx::MappedArgs::osstr().rev().count(), cnt);
+        assert_eq!(snailx::MappedArgs::os().rev().count(), cnt);
     }
 }
 
@@ -649,7 +659,7 @@ fn cstr_nth_back() {
 fn os_nth_back() {
     test_i! {
         a,
-        let mut args = snailx::MappedArgs::osstr();
+        let mut args = snailx::MappedArgs::os();
 
         if !a.is_empty() {
             assert_eq!(

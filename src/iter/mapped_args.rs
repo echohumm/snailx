@@ -14,9 +14,7 @@ import! {
 }
 
 use {
-    super::{args::Args, helpers::len},
-    cmdline::helpers,
-    direct
+    crate::{Args, helpers, direct, iter::len},
 };
 // TODO: may be better to not implement certain things manually and just delegate to fold
 
@@ -78,7 +76,7 @@ impl MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::s
     /// `std` feature.
     #[must_use]
     #[cfg_attr(not(feature = "no_cold"), cold)]
-    pub fn osstr()
+    pub fn os()
     -> MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::std::ffi::OsStr>>
     {
         #[cfg(not(feature = "infallible_map"))]
@@ -86,9 +84,28 @@ impl MappedArgs<&'static ::std::ffi::OsStr, fn(*const u8) -> Option<&'static ::s
             MappedArgs::new(helpers::to_osstr)
         }
         #[cfg(feature = "infallible_map")]
-        {
+        unsafe {
             // SAFETY: to_osstr only returns Some
-            unsafe { MappedArgs::new_infallible(helpers::to_osstr) }
+            MappedArgs::new_infallible(helpers::to_osstr)
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "to_core_cstr"))]
+impl MappedArgs<&'static crate::StdCStr, fn(*const u8) -> Option<&'static crate::StdCStr>> {
+    /// Returns an iterator over the program's arguments as `&'static CStr`. Requires the
+    /// `std` or `to_core_cstr` feature.
+    #[must_use]
+    #[cfg_attr(not(feature = "no_cold"), cold)]
+    pub fn std_cstr()
+    -> MappedArgs<&'static crate::StdCStr, fn(*const u8) -> Option<&'static crate::StdCStr>> {
+        #[cfg(not(feature = "infallible_map"))]
+        {
+            MappedArgs::new(helpers::to_stdcstr)
+        }
+        #[cfg(feature = "infallible_map")]
+        unsafe {
+            MappedArgs::new_infallible(helpers::to_stdcstr)
         }
     }
 }
@@ -145,17 +162,40 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> MappedArgs<Ret, F> {
     /// as fallible. If `infallible_map` is enabled and this iterator is marked as infallible,
     /// returns `Some(len)`.
     pub fn len(&self) -> Option<usize> {
-        #[cfg(not(feature = "infallible_map"))]
-        {
-            None
-        }
-        #[cfg(feature = "infallible_map")]
-        {
-            if self.fallible { None } else { Some(unsafe { len(self.cur, self.end) }) }
+        fallible_q! {
+            self,
+            {
+                None
+            },
+            {
+                Some(unsafe { len(self.cur, self.end) })
+            }
         }
     }
 
-    // TODO: get/get_unchecked
+    /// Gets the element at index `i`, or `None` if the index is out-of-bounds or the mapping
+    /// function returns `None`. This does _not_ consume elements like `nth`.
+    ///
+    /// This does perform a mapping, but does not skip elements which return `None`.
+    #[must_use]
+    #[inline]
+    pub fn get(&self, i: usize) -> Option<Ret> {
+        if unsafe { len(self.cur, self.end) } > i { unsafe { self.get_unchecked(i) } } else { None }
+    }
+
+    /// Gets the element at index `i`. This does _not_ consume elements.
+    ///
+    /// This will return `None` if the mapping function does.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the element at index `i` exists and is in bounds.
+    #[must_use]
+    #[inline]
+    pub unsafe fn get_unchecked(&self, i: usize) -> Option<Ret> {
+        (self.map)(self.cur.add(i).read())
+    }
+    // TODO: skipping_[get/get_unchecked]
 }
 
 impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
@@ -195,18 +235,19 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> Iterator for MappedArgs<Ret, F> {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        #[cfg(not(feature = "infallible_map"))]
-        // 0 lower bound because all args may be skipped, len upper bound because all may be fine
-        {
-            (0, Some(unsafe { len(self.cur, self.end) }))
-        }
-        #[cfg(feature = "infallible_map")]
-        {
-            let len = unsafe { len(self.cur, self.end) };
-            if self.fallible { (0, Some(len)) } else { (len, Some(len)) }
+        let len = unsafe { len(self.cur, self.end) };
+        fallible_q! {
+            self,
+            {
+                (0, Some(len))
+            },
+            {
+                (len, Some(len))
+            }
         }
     }
 
+    // default impl has an attr i don't want to override unless necessary
     #[cfg(feature = "infallible_map")]
     #[inline]
     fn count(self) -> usize {
@@ -362,22 +403,16 @@ impl<Ret, F: Fn(*const u8) -> Option<Ret>> DoubleEndedIterator for MappedArgs<Re
             self.end = unsafe { self.end.sub(1) };
             assume!(!self.end.is_null() && self.end > self.cur);
 
-            #[cfg(not(feature = "infallible_map"))]
-            {
-                // SAFETY: the pointer is from argv, which always contains valid pointers to cstrs
-                if let Some(v) = (self.map)(unsafe { self.end.read() }) {
-                    acc = f(acc, v);
-                }
-            }
-            #[cfg(feature = "infallible_map")]
-            {
-                if self.fallible {
+            fallible_q! {
+                self,
+                {
                     // SAFETY: the pointer is from argv, which always contains valid pointers to
                     // cstrs
                     if let Some(v) = (self.map)(unsafe { self.end.read() }) {
                         acc = f(acc, v);
                     }
-                } else {
+                },
+                {
                     // SAFETY: caller guarantees that the map is infallible
                     acc = f(
                         acc,
